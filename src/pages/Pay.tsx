@@ -80,6 +80,17 @@ export default function Pay() {
 
 type Phase = 'idle' | 'uploading' | 'verifying' | 'done'
 
+async function edgeErrorMessage(err: unknown, fallback: string): Promise<string> {
+  const ctx = (err as { context?: Response } | null)?.context
+  if (ctx && typeof ctx.json === 'function') {
+    try {
+      const body = await ctx.clone().json()
+      if (body?.error) return String(body.error)
+    } catch { /* not JSON */ }
+  }
+  return err instanceof Error ? err.message : fallback
+}
+
 function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (o: Order) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -101,7 +112,7 @@ function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (o: Orde
       const { data, error: fnErr } = await supabase.functions.invoke('verify-payment', {
         body: { order_id: order.id, receipt_path: path },
       })
-      if (fnErr) throw fnErr
+      if (fnErr) throw new Error(await edgeErrorMessage(fnErr, 'Verification failed'))
 
       const { data: fresh } = await supabase.from('orders').select('*').eq('id', order.id).single()
       if (fresh) onUpdated(fresh as Order)

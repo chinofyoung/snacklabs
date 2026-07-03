@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { Camera, CreditCard, CupSoda, LayoutDashboard, Popcorn, ReceiptText } from 'lucide-react'
+import { ArrowLeft, Camera, CreditCard, CupSoda, LayoutDashboard, Popcorn, ReceiptText, Store } from 'lucide-react'
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -32,6 +32,13 @@ export default function AdminLayout() {
             {n.label}
           </NavLink>
         ))}
+        <Link
+          to="/"
+          className="mt-auto rounded-md px-3 py-2.5 text-sm font-medium transition flex items-center gap-2 text-ink-500 hover:bg-ink-900/5"
+        >
+          <ArrowLeft className="size-6" strokeWidth={2.5} aria-hidden="true" />
+          Back to store
+        </Link>
       </aside>
 
       <main className="grow pb-24 md:pb-8">
@@ -39,6 +46,13 @@ export default function AdminLayout() {
       </main>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface-raised border-t border-line flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <Link
+          to="/"
+          className="flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 text-ink-500"
+        >
+          <Store className="size-6" strokeWidth={2.5} aria-hidden="true" />
+          Store
+        </Link>
         {NAV.map((n) => (
           <NavLink
             key={n.to}

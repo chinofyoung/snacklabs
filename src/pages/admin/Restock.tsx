@@ -7,6 +7,17 @@ import type { RestockDetection } from '../../types'
 type Line = RestockDetection & { include: boolean; price: string }
 type Phase = 'idle' | 'analyzing' | 'review' | 'applying' | 'done'
 
+async function edgeErrorMessage(err: unknown, fallback: string): Promise<string> {
+  const ctx = (err as { context?: Response } | null)?.context
+  if (ctx && typeof ctx.json === 'function') {
+    try {
+      const body = await ctx.clone().json()
+      if (body?.error) return String(body.error)
+    } catch { /* not JSON */ }
+  }
+  return err instanceof Error ? err.message : fallback
+}
+
 export default function Restock() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -29,7 +40,7 @@ export default function Restock() {
       const { data, error: fnErr } = await supabase.functions.invoke('analyze-shelf', {
         body: { photo_path: path },
       })
-      if (fnErr) throw fnErr
+      if (fnErr) throw new Error(await edgeErrorMessage(fnErr, 'Analysis failed'))
       const detections = (data.detections ?? []) as RestockDetection[]
       setSessionId(data.session_id)
       setLines(detections.map((d) => ({

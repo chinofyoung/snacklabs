@@ -21,10 +21,6 @@ export default function Login() {
         {/* The price tag: this app's signature element — a hand-labelled shelf tag,
             complete with a punched hole, standing in for the physical pantry sign. */}
         <div className="relative mx-auto w-fit">
-          <div
-            aria-hidden
-            className="absolute left-1/2 -top-3.5 -translate-x-1/2 size-3 rounded-full bg-ink-900 ring-4 ring-brand-50"
-          />
           <div className="rounded-2xl bg-brand-50 px-8 pt-8 pb-7 text-center shadow-float">
             <Popcorn className="size-14 mx-auto mb-2 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
             <h1 className="font-display text-3xl font-extrabold text-ink-900">SnackLabs</h1>
