@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
 
   // Log AI usage cost (best-effort; never breaks verification)
   try {
-    const cost = computeCost(usage ?? {})
+    const cost = computeCost(usage ?? {}, 'claude-opus-4-8')
     await admin.from('ai_usage').insert({
       fn: 'verify-payment',
       order_id,

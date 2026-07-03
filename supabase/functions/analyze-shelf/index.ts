@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_ANON_KEY')!,
     { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } },
   )
-  const { data: { user } } = await userClient.auth.getUser()
+  const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '')
+  const { data: { user } } = await userClient.auth.getUser(token)
   if (!user) return json({ error: 'unauthenticated' }, 401)
   const { data: profile } = await userClient
     .from('profiles').select('is_admin').eq('id', user.id).single()
@@ -71,8 +72,9 @@ Deno.serve(async (req) => {
   try {
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! })
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-8',
+      model: 'claude-sonnet-5',
       max_tokens: 4096,
+      thinking: { type: 'disabled' },
       output_config: { format: { type: 'json_schema', schema: DETECTIONS_SCHEMA } },
       messages: [{
         role: 'user',
@@ -115,7 +117,7 @@ Deno.serve(async (req) => {
 
   // Log AI usage cost (best-effort; never breaks the analyze flow)
   try {
-    const cost = computeCost(usage ?? {})
+    const cost = computeCost(usage ?? {}, 'claude-sonnet-5')
     await admin.from('ai_usage').insert({
       fn: 'analyze-shelf',
       session_id: session.id,
