@@ -1,0 +1,14 @@
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!session) return
+    let ignore = false
+    supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      .then(({ data }) => {
+        if (ignore) return
+        setProfile(data as Profile | null)
+        setLoading(false)
+      })
+    return () => { ignore = true }
+  }, [session])

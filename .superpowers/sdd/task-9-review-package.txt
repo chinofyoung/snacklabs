@@ -1,0 +1,144 @@
+===== FILE: src/pages/admin/AdminLayout.tsx =====
+import { NavLink, Outlet, Link } from 'react-router'
+
+const NAV = [
+  { to: '/admin', label: 'Dashboard', icon: '📊', end: true },
+  { to: '/admin/items', label: 'Items', icon: '🧃', end: false },
+  { to: '/admin/restock', label: 'Restock', icon: '📷', end: false },
+  { to: '/admin/orders', label: 'Orders', icon: '🧾', end: false },
+  { to: '/admin/payments', label: 'Payments', icon: '💳', end: false },
+]
+
+export default function AdminLayout() {
+  return (
+    <div className="min-h-dvh md:flex">
+      <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-stone-200 bg-white p-4 gap-1">
+        <Link to="/" className="font-bold text-lg mb-4">🍿 SnackLabs</Link>
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              `rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                isActive ? 'bg-ink-900 text-white' : 'text-ink-500 hover:bg-stone-100'
+              }`
+            }
+          >
+            {n.icon} {n.label}
+          </NavLink>
+        ))}
+      </aside>
+
+      <main className="grow pb-24 md:pb-8">
+        <Outlet />
+      </main>
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-stone-200 flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-0.5 text-[10px] px-2 ${
+                isActive ? 'text-brand-600 font-bold' : 'text-ink-500'
+              }`
+            }
+          >
+            <span className="text-xl">{n.icon}</span>
+            {n.label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  )
+}
+
+===== FILE: src/pages/admin/Dashboard.tsx =====
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
+import { supabase } from '../../lib/supabase'
+import { formatPeso } from '../../lib/money'
+import type { Item, Order } from '../../types'
+
+export default function Dashboard() {
+  const [todaySales, setTodaySales] = useState(0)
+  const [reviewCount, setReviewCount] = useState(0)
+  const [lowStock, setLowStock] = useState<Item[]>([])
+
+  useEffect(() => {
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+
+    supabase.from('orders').select('total')
+      .eq('status', 'paid').gte('created_at', startOfDay.toISOString())
+      .then(({ data }) =>
+        setTodaySales(((data as Pick<Order, 'total'>[]) ?? []).reduce((s, o) => s + Number(o.total), 0)))
+
+    supabase.from('orders').select('id', { count: 'exact', head: true })
+      .eq('status', 'needs_review')
+      .then(({ count }) => setReviewCount(count ?? 0))
+
+    supabase.from('items').select('*').eq('is_active', true)
+      .then(({ data }) =>
+        setLowStock(((data as Item[]) ?? []).filter((i) => i.stock <= i.low_stock_threshold)))
+  }, [])
+
+  return (
+    <div className="p-4 md:p-8 space-y-6 max-w-3xl">
+      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <p className="text-sm text-ink-500">Sales today</p>
+          <p className="text-2xl font-black text-brand-600">{formatPeso(todaySales)}</p>
+        </div>
+        <Link to="/admin/orders?filter=needs_review" className="rounded-2xl bg-white p-5 shadow-sm">
+          <p className="text-sm text-ink-500">Needs review</p>
+          <p className={`text-2xl font-black ${reviewCount > 0 ? 'text-amber-600' : ''}`}>{reviewCount}</p>
+        </Link>
+      </div>
+      <section className="space-y-2">
+        <h2 className="font-semibold">Low stock</h2>
+        {lowStock.length === 0 ? (
+          <p className="text-sm text-ink-500">All stocked up 🎉</p>
+        ) : (
+          lowStock.map((i) => (
+            <div key={i.id} className="rounded-xl bg-white p-3 shadow-sm flex justify-between text-sm">
+              <span>{i.name}</span>
+              <span className="font-bold text-amber-600">{i.stock} left</span>
+            </div>
+          ))
+        )}
+      </section>
+    </div>
+  )
+}
+
+===== FILE: src/App.tsx =====
+import { Routes, Route } from 'react-router'
+import Login from './pages/Login'
+import Store from './pages/Store'
+import Cart from './pages/Cart'
+import Pay from './pages/Pay'
+import Orders from './pages/Orders'
+import AdminLayout from './pages/admin/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+import { RequireAuth, RequireAdmin } from './components/guards'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<RequireAuth><Store /></RequireAuth>} />
+      <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
+      <Route path="/pay/:orderId" element={<RequireAuth><Pay /></RequireAuth>} />
+      <Route path="/orders" element={<RequireAuth><Orders /></RequireAuth>} />
+      <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+        <Route index element={<Dashboard />} />
+        {/* Tasks 10–13 add: items, restock, orders, payments */}
+      </Route>
+    </Routes>
+  )
+}
+

@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand: warm orange accent, used for primary actions only */
+  --color-brand-50: #fff3e8;
+  --color-brand-100: #ffe4cc;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+
+  /* Warm neutral ink + surface scale (not cold grays) */
+  --color-ink-900: #221d17;
+  --color-ink-700: #4a4038;
+  --color-ink-500: #8a7f73;
+  --color-ink-400: #a89d90;
+  --color-surface: #fbf9f6;
+  --color-surface-raised: #ffffff;
+  --color-line: #ede7de;
+
+  /* Type scale */
+  --font-display: ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Helvetica, Arial, sans-serif;
+
+  /* Radius scale, used consistently across cards/sheets/controls */
+  --radius-sm: 0.625rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  /* Single soft shadow token, used sparingly */
+  --shadow-card: 0 1px 2px rgba(34, 29, 23, 0.04), 0 8px 20px -12px rgba(34, 29, 23, 0.12);
+  --shadow-float: 0 12px 28px -8px rgba(234, 88, 12, 0.35);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--color-surface);
+    color: var(--color-ink-900);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Visible, consistent focus states on every interactive element */
+  a, button, input, select, textarea, [tabindex] {
+    outline-offset: 2px;
+  }
+
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  ::selection {
+    background: var(--color-brand-100);
+    color: var(--color-ink-900);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-float {
+    box-shadow: var(--shadow-float);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

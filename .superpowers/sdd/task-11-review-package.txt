@@ -1,0 +1,195 @@
+===== FILE: src/pages/admin/Payments.tsx =====
+import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { compressImage } from '../../lib/image'
+import type { PaymentMethod } from '../../types'
+
+type Draft = {
+  id?: string
+  label: string
+  type: 'ewallet' | 'bank'
+  account_name: string
+  account_number: string
+  file?: File | null
+  existing_qr?: string
+}
+
+const EMPTY: Draft = { label: '', type: 'ewallet', account_name: '', account_number: '', file: null }
+
+export default function Payments() {
+  const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () =>
+    supabase.from('payment_methods').select('*').order('created_at')
+      .then(({ data }) => setMethods((data as PaymentMethod[]) ?? []))
+
+  useEffect(() => { load() }, [])
+
+  const save = async () => {
+    if (!draft) return
+    setSaving(true)
+    setError(null)
+    try {
+      // Validate before uploading
+      const label = draft.label.trim()
+      const account_name = draft.account_name.trim()
+      if (!label) throw new Error('Label is required')
+      if (!account_name) throw new Error('Account name is required')
+      if (!draft.id && !draft.file) throw new Error('A QR code image is required')
+
+      let qr_image_url = draft.existing_qr
+      if (draft.file) {
+        const blob = await compressImage(draft.file, 1000, 0.9)
+        const path = `${crypto.randomUUID()}.jpg`
+        const { error: upErr } = await supabase.storage
+          .from('qr-codes').upload(path, blob, { contentType: 'image/jpeg' })
+        if (upErr) throw upErr
+        qr_image_url = supabase.storage.from('qr-codes').getPublicUrl(path).data.publicUrl
+      }
+      const payload = {
+        label,
+        type: draft.type,
+        account_name,
+        account_number: draft.account_number.trim(),
+        qr_image_url,
+      }
+      const q = draft.id
+        ? supabase.from('payment_methods').update(payload).eq('id', draft.id)
+        : supabase.from('payment_methods').insert(payload)
+      const { error: dbErr } = await q
+      if (dbErr) throw dbErr
+      setDraft(null)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggle = async (m: PaymentMethod) => {
+    setError(null)
+    const { error: upErr } = await supabase.from('payment_methods').update({ is_active: !m.is_active }).eq('id', m.id)
+    if (upErr) {
+      setError(`Toggle failed: ${upErr.message}`)
+      return
+    }
+    await load()
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Payment methods</h1>
+        <button onClick={() => setDraft({ ...EMPTY })} className="rounded-xl bg-brand-600 text-white px-4 py-2 font-medium">
+          + Add
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="space-y-2">
+        {methods.map((m) => (
+          <div key={m.id} className={`rounded-2xl bg-white p-3 shadow-sm flex items-center gap-3 ${m.is_active ? '' : 'opacity-50'}`}>
+            <img src={m.qr_image_url} alt="" className="size-12 rounded-xl object-cover" />
+            <div className="grow">
+              <p className="font-medium text-sm">{m.type === 'ewallet' ? '📱' : '🏦'} {m.label}</p>
+              <p className="text-xs text-ink-500">{m.account_name} {m.account_number && `· ${m.account_number}`}</p>
+            </div>
+            <button onClick={() => toggle(m)} className="text-sm text-ink-500 px-1">
+              {m.is_active ? 'Disable' : 'Enable'}
+            </button>
+            <button
+              onClick={() => setDraft({
+                id: m.id, label: m.label, type: m.type, account_name: m.account_name,
+                account_number: m.account_number, file: null, existing_qr: m.qr_image_url,
+              })}
+              className="text-sm text-ink-500 px-1"
+            >
+              Edit
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {draft && (
+        <div className="fixed inset-0 z-20 bg-black/40 flex items-end md:items-center justify-center" onClick={() => setDraft(null)}>
+          <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-bold text-lg">{draft.id ? 'Edit method' : 'New payment method'}</h2>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Label (e.g. GCash, BPI)</span>
+              <input className={inputCls} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+            </label>
+            <div className="flex gap-2">
+              {(['ewallet', 'bank'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setDraft({ ...draft, type: t })}
+                  className={`grow rounded-xl py-2.5 text-sm font-medium ${draft.type === t ? 'bg-ink-900 text-white' : 'bg-stone-100'}`}
+                >
+                  {t === 'ewallet' ? '📱 E-wallet' : '🏦 Bank'}
+                </button>
+              ))}
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Account name</span>
+              <input className={inputCls} value={draft.account_name} onChange={(e) => setDraft({ ...draft, account_name: e.target.value })} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Account / mobile number</span>
+              <input className={inputCls} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">QR code image</span>
+              <input type="file" accept="image/*" className="text-sm" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} />
+            </label>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setDraft(null)} className="grow rounded-xl bg-stone-100 py-3 font-medium">Cancel</button>
+              <button onClick={save} disabled={saving} className="grow rounded-xl bg-ink-900 text-white py-3 font-medium disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const inputCls = 'w-full rounded-xl bg-stone-50 border border-stone-200 px-3 py-2.5 text-sm outline-none focus:ring-2 ring-brand-500'
+
+===== FILE: src/App.tsx =====
+import { Routes, Route } from 'react-router'
+import Login from './pages/Login'
+import Store from './pages/Store'
+import Cart from './pages/Cart'
+import Pay from './pages/Pay'
+import Orders from './pages/Orders'
+import AdminLayout from './pages/admin/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+import Items from './pages/admin/Items'
+import Payments from './pages/admin/Payments'
+import { RequireAuth, RequireAdmin } from './components/guards'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<RequireAuth><Store /></RequireAuth>} />
+      <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
+      <Route path="/pay/:orderId" element={<RequireAuth><Pay /></RequireAuth>} />
+      <Route path="/orders" element={<RequireAuth><Orders /></RequireAuth>} />
+      <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+        <Route index element={<Dashboard />} />
+        <Route path="items" element={<Items />} />
+        <Route path="payments" element={<Payments />} />
+        {/* Tasks 11–13 add: restock, orders, payments */}
+      </Route>
+    </Routes>
+  )
+}
+

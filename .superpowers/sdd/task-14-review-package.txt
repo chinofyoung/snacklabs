@@ -1,0 +1,1543 @@
+===== FILE: src/index.css =====
+@import "tailwindcss";
+
+@theme {
+  /* Brand: warm orange accent, used for primary actions only */
+  --color-brand-50: #fff3e8;
+  --color-brand-100: #ffe4cc;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+
+  /* Warm neutral ink + surface scale (not cold grays) */
+  --color-ink-900: #221d17;
+  --color-ink-700: #4a4038;
+  --color-ink-500: #8a7f73;
+  --color-ink-400: #a89d90;
+  --color-surface: #fbf9f6;
+  --color-surface-raised: #ffffff;
+  --color-line: #ede7de;
+
+  /* Type scale */
+  --font-display: ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Helvetica, Arial, sans-serif;
+
+  /* Radius scale, used consistently across cards/sheets/controls */
+  --radius-sm: 0.625rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  /* Single soft shadow token, used sparingly */
+  --shadow-card: 0 1px 2px rgba(34, 29, 23, 0.04), 0 8px 20px -12px rgba(34, 29, 23, 0.12);
+  --shadow-float: 0 12px 28px -8px rgba(234, 88, 12, 0.35);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--color-surface);
+    color: var(--color-ink-900);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Visible, consistent focus states on every interactive element */
+  a, button, input, select, textarea, [tabindex] {
+    outline-offset: 2px;
+  }
+
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  ::selection {
+    background: var(--color-brand-100);
+    color: var(--color-ink-900);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-float {
+    box-shadow: var(--shadow-float);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+===== FILE: index.html =====
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SnackLabs — Office Pantry</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+===== FILE: src/pages/Login.tsx =====
+import { supabase } from '../lib/supabase'
+
+export default function Login() {
+  const signIn = () =>
+    supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    })
+
+  return (
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-10 relative overflow-hidden bg-ink-900">
+      {/* Ambient warm glow, evokes a fridge/shelf light */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 h-80 w-80 rounded-full opacity-40 blur-3xl"
+        style={{ background: 'radial-gradient(circle, var(--color-brand-500), transparent 70%)' }}
+      />
+
+      <div className="relative w-full max-w-xs">
+        {/* The price tag: this app's signature element — a hand-labelled shelf tag,
+            complete with a punched hole, standing in for the physical pantry sign. */}
+        <div className="relative mx-auto w-fit">
+          <div
+            aria-hidden
+            className="absolute left-1/2 -top-3.5 -translate-x-1/2 size-3 rounded-full bg-ink-900 ring-4 ring-brand-50"
+          />
+          <div className="rounded-2xl bg-brand-50 px-8 pt-8 pb-7 text-center shadow-float">
+            <div className="text-5xl mb-2" aria-hidden>🍿</div>
+            <h1 className="font-display text-3xl font-extrabold text-ink-900">SnackLabs</h1>
+            <p className="text-ink-500 mt-1 text-sm">The office pantry, in your pocket.</p>
+          </div>
+        </div>
+
+        <div className="mt-10 space-y-4">
+          <button
+            onClick={signIn}
+            className="w-full rounded-xl bg-surface-raised text-ink-900 py-3.5 font-semibold shadow-card active:scale-[0.98] transition flex items-center justify-center gap-2.5"
+          >
+            <GoogleIcon />
+            Continue with Google
+          </button>
+          <p className="text-xs text-center text-ink-400">goabroad.com accounts only</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.71v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.61z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.19l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.96 10.7A5.4 5.4 0 0 1 3.68 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.96 7.3C4.67 5.17 6.66 3.58 9 3.58z" />
+    </svg>
+  )
+}
+
+===== FILE: src/pages/Store.tsx =====
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router'
+import { supabase } from '../lib/supabase'
+import type { Item } from '../types'
+import ItemCard from '../components/ItemCard'
+import CartBar from '../components/CartBar'
+import { useAuth } from '../context/AuthContext'
+
+export default function Store() {
+  const { profile, signOut } = useAuth()
+  const [items, setItems] = useState<Item[]>([])
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('items').select('*').eq('is_active', true).order('name')
+      .then(({ data, error }) => {
+        if (error) {
+          setError('Could not load the shelf — pull to refresh or try again.')
+        } else {
+          setItems((data as Item[]) ?? [])
+        }
+        setLoading(false)
+      })
+  }, [])
+
+  const categories = useMemo(
+    () => [...new Set(items.map((i) => i.category))].sort(),
+    [items],
+  )
+  const visible = items.filter((i) =>
+    (!category || i.category === category) &&
+    i.name.toLowerCase().includes(search.toLowerCase()),
+  )
+
+  return (
+    <div className="max-w-md mx-auto min-h-dvh pb-28">
+      <header className="sticky top-0 z-10 bg-surface/90 backdrop-blur px-4 pt-4 pb-3 space-y-3 border-b border-line">
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-xl font-extrabold">🍿 SnackLabs</h1>
+          <div className="flex items-center gap-4 text-sm">
+            <Link to="/orders" className="text-ink-500 rounded-md">My orders</Link>
+            {profile?.is_admin && <Link to="/admin" className="text-brand-600 font-semibold rounded-md">Admin</Link>}
+            <button onClick={signOut} className="text-ink-500 rounded-md">Sign out</button>
+          </div>
+        </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search snacks…"
+          className="w-full rounded-xl bg-surface-raised px-4 py-2.5 text-sm shadow-card outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+        />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <Chip active={!category} onClick={() => setCategory(null)}>All</Chip>
+          {categories.map((c) => (
+            <Chip key={c} active={category === c} onClick={() => setCategory(c)}>{c}</Chip>
+          ))}
+        </div>
+      </header>
+
+      {loading ? (
+        <p className="p-8 text-center text-ink-500">Loading the shelf…</p>
+      ) : error ? (
+        <p className="p-8 text-center text-red-600">{error}</p>
+      ) : visible.length === 0 ? (
+        <div className="p-10 text-center space-y-2">
+          <p className="text-4xl" aria-hidden>{items.length === 0 ? '📦' : '🔍'}</p>
+          {items.length === 0 ? (
+            <>
+              <p className="text-ink-700 font-medium">The shelf is empty</p>
+              <p className="text-ink-500 text-sm">Check back once it's restocked.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-ink-700 font-medium">Nothing matches{search ? ` "${search}"` : ''}</p>
+              <p className="text-ink-500 text-sm">Try a different search or clear the filter.</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 px-4 pt-3">
+          {visible.map((i) => <ItemCard key={i.id} item={i} />)}
+        </div>
+      )}
+      <CartBar />
+    </div>
+  )
+}
+
+function Chip({ active, onClick, children }: {
+  active: boolean; onClick: () => void; children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition ${
+        active ? 'bg-ink-900 text-white' : 'bg-surface-raised text-ink-500 shadow-card'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+===== FILE: src/components/ItemCard.tsx =====
+import type { Item } from '../types'
+import { formatPeso } from '../lib/money'
+import { useCart } from '../context/CartContext'
+
+export default function ItemCard({ item }: { item: Item }) {
+  const { add, lines } = useCart()
+  const inCart = lines.find((l) => l.item.id === item.id)?.qty ?? 0
+  const out = item.stock <= 0
+  const maxed = inCart >= item.stock
+
+  return (
+    <div className={`rounded-lg bg-surface-raised shadow-card overflow-hidden flex flex-col transition ${out ? 'opacity-45 grayscale-[40%]' : ''}`}>
+      <div className="aspect-square bg-brand-50 flex items-center justify-center relative">
+        {item.image_url
+          ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+          : <span className="text-4xl" aria-hidden>🛒</span>}
+        {out && (
+          <span className="absolute top-2 left-2 rounded-full bg-ink-900/80 text-white text-[10px] font-semibold px-2 py-0.5">
+            Out of stock
+          </span>
+        )}
+      </div>
+      <div className="p-3 flex flex-col gap-1 grow">
+        <p className="font-medium text-sm leading-tight">{item.name}</p>
+        <p className="text-brand-600 font-bold tabular-nums">{formatPeso(item.price)}</p>
+        {!out && (
+          <p className={`text-xs ${item.stock <= item.low_stock_threshold ? 'text-amber-600 font-medium' : 'text-ink-500'}`}>
+            {item.stock} left
+          </p>
+        )}
+        <button
+          disabled={out || maxed}
+          onClick={() => add(item)}
+          className="mt-auto rounded-md bg-ink-900 text-white text-sm py-2 font-medium disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-95 transition"
+        >
+          {inCart > 0 ? `In cart · ${inCart}` : 'Add'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+===== FILE: src/components/CartBar.tsx =====
+import { Link } from 'react-router'
+import { useCart } from '../context/CartContext'
+import { formatPeso } from '../lib/money'
+
+export default function CartBar() {
+  const { count, total } = useCart()
+  if (count === 0) return null
+  return (
+    <Link
+      to="/cart"
+      className="fixed bottom-4 inset-x-4 max-w-md mx-auto rounded-lg bg-brand-600 text-white px-5 py-3.5 flex items-center justify-between shadow-float active:scale-[0.98] transition"
+    >
+      <span className="font-medium">{count} item{count > 1 ? 's' : ''}</span>
+      <span className="font-bold tabular-nums">{formatPeso(total)} · View cart →</span>
+    </Link>
+  )
+}
+
+===== FILE: src/pages/Cart.tsx =====
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { supabase } from '../lib/supabase'
+import { useCart } from '../context/CartContext'
+import { formatPeso } from '../lib/money'
+import type { PaymentMethod } from '../types'
+
+export default function Cart() {
+  const { lines, setLineQty, total, clear } = useCart()
+  const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [methodId, setMethodId] = useState<string | null>(null)
+  const [placing, setPlacing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    supabase.from('payment_methods').select('*').eq('is_active', true)
+      .then(({ data }) => {
+        const m = (data as PaymentMethod[]) ?? []
+        setMethods(m)
+        if (m.length > 0) setMethodId(m[0].id)
+      })
+  }, [])
+
+  const placeOrder = async () => {
+    setPlacing(true)
+    setError(null)
+    const { data, error } = await supabase.rpc('create_order', {
+      p_items: lines.map((l) => ({ item_id: l.item.id, qty: l.qty })),
+      p_payment_method_id: methodId,
+    })
+    setPlacing(false)
+    if (error) {
+      setError(
+        error.message.includes('insufficient stock')
+          ? 'Someone beat you to it — an item just went out of stock. Adjust your cart.'
+          : error.message,
+      )
+      return
+    }
+    clear()
+    navigate(`/pay/${data}`)
+  }
+
+  if (lines.length === 0) {
+    return (
+      <div className="max-w-md mx-auto min-h-dvh flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-4xl" aria-hidden>🛒</p>
+        <p className="text-ink-700 font-medium">Your cart is empty</p>
+        <p className="text-ink-500 text-sm -mt-2">Add something from the shelf to get started.</p>
+        <Link to="/" className="text-brand-600 font-semibold mt-2 rounded-md">← Back to store</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-6">
+      <header className="flex items-center gap-3">
+        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <h1 className="font-display text-xl font-bold">Your cart</h1>
+      </header>
+
+      <div className="space-y-3">
+        {lines.map(({ item, qty }) => (
+          <div key={item.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
+            <div className="size-14 rounded-md bg-brand-50 flex items-center justify-center overflow-hidden shrink-0">
+              {item.image_url
+                ? <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+                : <span aria-hidden>🛒</span>}
+            </div>
+            <div className="grow min-w-0">
+              <p className="font-medium text-sm truncate">{item.name}</p>
+              <p className="text-brand-600 font-bold text-sm tabular-nums">{formatPeso(item.price)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Stepper onClick={() => setLineQty(item.id, qty - 1)} label={`Decrease ${item.name} quantity`}>−</Stepper>
+              <span className="w-6 text-center font-medium tabular-nums">{qty}</span>
+              <Stepper onClick={() => setLineQty(item.id, qty + 1)} label={`Increase ${item.name} quantity`}>+</Stepper>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <section className="space-y-2">
+        <h2 className="font-semibold text-sm text-ink-700">Pay with</h2>
+        {methods.length === 0 && (
+          <p className="text-sm text-ink-500">No payment methods set up yet — ask your admin.</p>
+        )}
+        {methods.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setMethodId(m.id)}
+            className={`w-full rounded-md p-3 text-left flex items-center gap-3 transition ${
+              methodId === m.id ? 'bg-ink-900 text-white' : 'bg-surface-raised shadow-card'
+            }`}
+          >
+            <span aria-hidden>{m.type === 'ewallet' ? '📱' : '🏦'}</span>
+            <span className="font-medium">{m.label}</span>
+          </button>
+        ))}
+      </section>
+
+      {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+      <button
+        disabled={placing || !methodId}
+        onClick={placeOrder}
+        className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold text-lg disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
+      >
+        {placing ? 'Placing order…' : `Pay ${formatPeso(total)}`}
+      </button>
+    </div>
+  )
+}
+
+function Stepper({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className="size-8 rounded-full bg-ink-900/5 font-bold active:scale-90 transition"
+    >
+      {children}
+    </button>
+  )
+}
+
+===== FILE: src/pages/Pay.tsx =====
+import { useEffect, useState, useRef } from 'react'
+import { Link, useParams } from 'react-router'
+import { supabase } from '../lib/supabase'
+import { formatPeso } from '../lib/money'
+import { compressImage } from '../lib/image'
+import type { Order, PaymentMethod } from '../types'
+
+export default function Pay() {
+  const { orderId } = useParams()
+  const [order, setOrder] = useState<Order | null>(null)
+  const [method, setMethod] = useState<PaymentMethod | null>(null)
+
+  useEffect(() => {
+    if (!orderId) return
+    supabase.from('orders').select('*').eq('id', orderId).single()
+      .then(async ({ data }) => {
+        const o = data as Order | null
+        setOrder(o)
+        if (o?.payment_method_id) {
+          const { data: pm } = await supabase
+            .from('payment_methods').select('*').eq('id', o.payment_method_id).single()
+          setMethod(pm as PaymentMethod)
+        }
+      })
+  }, [orderId])
+
+  if (!order) return <div className="min-h-dvh flex items-center justify-center text-ink-500">Loading…</div>
+
+  return (
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5">
+      <header className="flex items-center gap-3">
+        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <h1 className="font-display text-xl font-bold">Scan & pay</h1>
+      </header>
+
+      <div className="rounded-lg bg-surface-raised p-6 shadow-card text-center space-y-4">
+        <p className="text-ink-500 text-sm">Amount due</p>
+        <p className="text-4xl font-black text-brand-600 tabular-nums">{formatPeso(order.total)}</p>
+        {method && (
+          <>
+            <img src={method.qr_image_url} alt={`${method.label} QR code`} className="mx-auto w-64 rounded-md" />
+            <div>
+              <p className="font-semibold">{method.label}</p>
+              <p className="text-sm text-ink-500">{method.account_name}</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <PaymentStatus order={order} onUpdated={setOrder} />
+    </div>
+  )
+}
+
+type Phase = 'idle' | 'uploading' | 'verifying' | 'done'
+
+function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (o: Order) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  const handleFile = async (file: File) => {
+    setError(null)
+    setPhase('uploading')
+    try {
+      const blob = await compressImage(file)
+      if (blob.size > 5 * 1024 * 1024) throw new Error('Image too large even after compression')
+      const path = `${order.user_id}/${order.id}.jpg`
+      const { error: upErr } = await supabase.storage
+        .from('receipts')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+      if (upErr) throw upErr
+
+      setPhase('verifying')
+      const { data, error: fnErr } = await supabase.functions.invoke('verify-payment', {
+        body: { order_id: order.id, receipt_path: path },
+      })
+      if (fnErr) throw fnErr
+
+      const { data: fresh } = await supabase.from('orders').select('*').eq('id', order.id).single()
+      if (fresh) onUpdated(fresh as Order)
+      setPhase('done')
+      void data
+    } catch (e) {
+      setPhase('idle')
+      setError(e instanceof Error ? e.message : 'Something went wrong — try again.')
+    }
+  }
+
+  if (order.status === 'paid') {
+    return (
+      <div className="rounded-lg bg-green-50 text-green-800 p-5 text-center space-y-1">
+        <p className="text-3xl" aria-hidden>✅</p>
+        <p className="font-bold">Payment verified — enjoy!</p>
+      </div>
+    )
+  }
+  if (order.status === 'needs_review') {
+    return (
+      <div className="rounded-lg bg-amber-50 text-amber-800 p-5 text-center space-y-1">
+        <p className="text-3xl" aria-hidden>🕐</p>
+        <p className="font-bold">Sent to admin for review</p>
+        {order.ai_verdict?.reason && <p className="text-sm">{order.ai_verdict.reason}</p>}
+      </div>
+    )
+  }
+  if (order.status === 'cancelled') {
+    return <p className="text-center text-ink-500">This order was cancelled.</p>
+  }
+  if (order.status === 'verifying') {
+    return (
+      <div className="rounded-lg bg-blue-50 text-blue-800 p-5 text-center space-y-1">
+        <p className="text-3xl" aria-hidden>🔎</p>
+        <p className="font-bold">Verifying your payment…</p>
+        <p className="text-sm">This usually takes a few seconds. Check My Orders for the result.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+      />
+      <button
+        disabled={phase !== 'idle'}
+        onClick={() => fileRef.current?.click()}
+        className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
+      >
+        {phase === 'idle' && "I've paid — upload screenshot"}
+        {phase === 'uploading' && 'Uploading…'}
+        {phase === 'verifying' && 'Verifying with AI…'}
+        {phase === 'done' && 'Done'}
+      </button>
+      {error && <p className="text-sm text-red-600 text-center" role="alert">{error}</p>}
+    </div>
+  )
+}
+
+===== FILE: src/pages/Orders.tsx =====
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
+import { supabase } from '../lib/supabase'
+import { formatPeso } from '../lib/money'
+import type { Order, OrderStatus } from '../types'
+
+const STATUS_STYLE: Record<OrderStatus, string> = {
+  awaiting_payment: 'bg-ink-900/5 text-ink-500',
+  verifying: 'bg-blue-50 text-blue-700',
+  paid: 'bg-green-50 text-green-700',
+  needs_review: 'bg-amber-50 text-amber-700',
+  cancelled: 'bg-ink-900/5 text-ink-500 line-through',
+}
+
+export default function Orders() {
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('orders').select('*').order('created_at', { ascending: false })
+      .then(({ data }) => { setOrders((data as Order[]) ?? []); setLoading(false) })
+  }, [])
+
+  return (
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-4">
+      <header className="flex items-center gap-3">
+        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <h1 className="font-display text-xl font-bold">My orders</h1>
+      </header>
+      {loading ? (
+        <p className="text-center text-ink-500 py-8">Loading…</p>
+      ) : orders.length === 0 ? (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-4xl" aria-hidden>🧾</p>
+          <p className="text-ink-700 font-medium">No orders yet</p>
+          <p className="text-ink-500 text-sm">Orders you place will show up here.</p>
+          <Link to="/" className="inline-block text-brand-600 font-semibold mt-2 rounded-md">← Back to store</Link>
+        </div>
+      ) : (
+        orders.map((o) => (
+          <Link
+            key={o.id}
+            to={`/pay/${o.id}`}
+            className="block rounded-lg bg-surface-raised p-4 shadow-card space-y-1"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold tabular-nums">{formatPeso(o.total)}</span>
+              <span className={`text-xs rounded-full px-2.5 py-1 capitalize font-medium ${STATUS_STYLE[o.status]}`}>
+                {o.status.replace('_', ' ')}
+              </span>
+            </div>
+            <p className="text-xs text-ink-500">{new Date(o.created_at).toLocaleString()}</p>
+            {o.status === 'needs_review' && o.ai_verdict?.reason && (
+              <p className="text-xs text-amber-700">{o.ai_verdict.reason}</p>
+            )}
+          </Link>
+        ))
+      )}
+    </div>
+  )
+}
+
+===== FILE: src/pages/admin/AdminLayout.tsx =====
+import { NavLink, Outlet, Link } from 'react-router'
+
+const NAV = [
+  { to: '/admin', label: 'Dashboard', icon: '📊', end: true },
+  { to: '/admin/items', label: 'Items', icon: '🧃', end: false },
+  { to: '/admin/restock', label: 'Restock', icon: '📷', end: false },
+  { to: '/admin/orders', label: 'Orders', icon: '🧾', end: false },
+  { to: '/admin/payments', label: 'Payments', icon: '💳', end: false },
+]
+
+export default function AdminLayout() {
+  return (
+    <div className="min-h-dvh md:flex bg-surface">
+      <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-line bg-surface-raised p-4 gap-1">
+        <Link to="/" className="font-display font-extrabold text-lg mb-4 rounded-md">🍿 SnackLabs</Link>
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              `rounded-md px-3 py-2.5 text-sm font-medium transition ${
+                isActive ? 'bg-ink-900 text-white' : 'text-ink-500 hover:bg-ink-900/5'
+              }`
+            }
+          >
+            {n.icon} {n.label}
+          </NavLink>
+        ))}
+      </aside>
+
+      <main className="grow pb-24 md:pb-8">
+        <Outlet />
+      </main>
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface-raised border-t border-line flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 ${
+                isActive ? 'text-brand-600 font-bold' : 'text-ink-500'
+              }`
+            }
+          >
+            <span className="text-xl" aria-hidden>{n.icon}</span>
+            {n.label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  )
+}
+
+===== FILE: src/pages/admin/Dashboard.tsx =====
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
+import { supabase } from '../../lib/supabase'
+import { formatPeso } from '../../lib/money'
+import type { Item, Order } from '../../types'
+
+export default function Dashboard() {
+  const [todaySales, setTodaySales] = useState(0)
+  const [reviewCount, setReviewCount] = useState(0)
+  const [lowStock, setLowStock] = useState<Item[]>([])
+
+  useEffect(() => {
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+
+    supabase.from('orders').select('total')
+      .eq('status', 'paid').gte('created_at', startOfDay.toISOString())
+      .then(({ data }) =>
+        setTodaySales(((data as Pick<Order, 'total'>[]) ?? []).reduce((s, o) => s + Number(o.total), 0)))
+
+    supabase.from('orders').select('id', { count: 'exact', head: true })
+      .eq('status', 'needs_review')
+      .then(({ count }) => setReviewCount(count ?? 0))
+
+    supabase.from('items').select('*').eq('is_active', true)
+      .then(({ data }) =>
+        setLowStock(((data as Item[]) ?? []).filter((i) => i.stock <= i.low_stock_threshold)))
+  }, [])
+
+  return (
+    <div className="p-4 md:p-8 space-y-6 max-w-3xl">
+      <h1 className="font-display text-2xl font-bold">Dashboard</h1>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg bg-surface-raised p-5 shadow-card">
+          <p className="text-sm text-ink-500">Sales today</p>
+          <p className="text-2xl font-black text-brand-600 tabular-nums">{formatPeso(todaySales)}</p>
+        </div>
+        <Link to="/admin/orders?filter=needs_review" className="rounded-lg bg-surface-raised p-5 shadow-card transition hover:shadow-none">
+          <p className="text-sm text-ink-500">Needs review</p>
+          <p className={`text-2xl font-black tabular-nums ${reviewCount > 0 ? 'text-amber-600' : 'text-ink-900'}`}>{reviewCount}</p>
+        </Link>
+      </div>
+      <section className="space-y-2">
+        <h2 className="font-semibold text-sm text-ink-700">Low stock</h2>
+        {lowStock.length === 0 ? (
+          <p className="text-sm text-ink-500">All stocked up 🎉</p>
+        ) : (
+          lowStock.map((i) => (
+            <div key={i.id} className="rounded-md bg-surface-raised p-3 shadow-card flex justify-between text-sm">
+              <span>{i.name}</span>
+              <span className="font-bold text-amber-600 tabular-nums">{i.stock} left</span>
+            </div>
+          ))
+        )}
+      </section>
+    </div>
+  )
+}
+
+===== FILE: src/pages/admin/Items.tsx =====
+import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { formatPeso } from '../../lib/money'
+import { compressImage } from '../../lib/image'
+import type { Item } from '../../types'
+
+type Draft = {
+  id?: string
+  name: string
+  price: string
+  stock: string
+  category: string
+  low_stock_threshold: string
+  file?: File | null
+}
+
+const EMPTY: Draft = { name: '', price: '', stock: '0', category: 'snacks', low_stock_threshold: '3', file: null }
+
+export default function Items() {
+  const [items, setItems] = useState<Item[]>([])
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () =>
+    supabase.from('items').select('*').eq('is_active', true).order('name')
+      .then(({ data }) => setItems((data as Item[]) ?? []))
+
+  useEffect(() => { load() }, [])
+
+  const adjustStock = async (item: Item, delta: number) => {
+    setError(null)
+    const next = Math.max(0, item.stock + delta)
+    setItems((all) => all.map((i) => (i.id === item.id ? { ...i, stock: next } : i)))
+    const { error: upErr } = await supabase.from('items').update({ stock: next }).eq('id', item.id)
+    if (upErr) {
+      setError(`Stock update failed: ${upErr.message}`)
+      await load()
+    }
+  }
+
+  const save = async () => {
+    if (!draft) return
+    setSaving(true)
+    setError(null)
+    try {
+      // Validate before uploading
+      const name = draft.name.trim()
+      const price = Number(draft.price)
+      const stock = Math.trunc(Number(draft.stock))
+      const low = Math.trunc(Number(draft.low_stock_threshold))
+      if (!name) throw new Error('Name is required')
+      if (!Number.isFinite(price) || price < 0) throw new Error('Price must be a number ≥ 0')
+      if (!Number.isFinite(stock) || stock < 0) throw new Error('Stock must be a whole number ≥ 0')
+      if (!Number.isFinite(low) || low < 0) throw new Error('Low stock alert must be a whole number ≥ 0')
+
+      let image_url: string | undefined
+      if (draft.file) {
+        const blob = await compressImage(draft.file, 800)
+        const path = `${crypto.randomUUID()}.jpg`
+        const { error: upErr } = await supabase.storage
+          .from('item-images').upload(path, blob, { contentType: 'image/jpeg' })
+        if (upErr) throw upErr
+        image_url = supabase.storage.from('item-images').getPublicUrl(path).data.publicUrl
+      }
+      const payload = {
+        name,
+        price,
+        stock,
+        category: draft.category.trim() || 'snacks',
+        low_stock_threshold: low,
+        ...(image_url ? { image_url } : {}),
+      }
+      const q = draft.id
+        ? supabase.from('items').update(payload).eq('id', draft.id)
+        : supabase.from('items').insert(payload)
+      const { error: dbErr } = await q
+      if (dbErr) throw dbErr
+      setDraft(null)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deactivate = async (item: Item) => {
+    if (!confirm(`Remove "${item.name}" from the store?`)) return
+    setError(null)
+    const { error: delErr } = await supabase.from('items').update({ is_active: false }).eq('id', item.id)
+    if (delErr) {
+      setError(`Remove failed: ${delErr.message}`)
+      return
+    }
+    await load()
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-bold">Items</h1>
+        <button
+          onClick={() => setDraft({ ...EMPTY })}
+          className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium"
+        >
+          + Add item
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+      {items.length === 0 ? (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-4xl" aria-hidden>🧃</p>
+          <p className="text-ink-700 font-medium">No items yet</p>
+          <p className="text-ink-500 text-sm">Add your first snack to stock the shelf.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((i) => (
+            <div key={i.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
+              <div className="size-12 rounded-md bg-brand-50 overflow-hidden flex items-center justify-center shrink-0">
+                {i.image_url ? <img src={i.image_url} alt="" className="w-full h-full object-cover" /> : <span aria-hidden>🛒</span>}
+              </div>
+              <div className="grow min-w-0">
+                <p className="font-medium text-sm truncate">{i.name}</p>
+                <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
+                <span className={`w-8 text-center font-bold text-sm tabular-nums ${i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
+                  {i.stock}
+                </span>
+                <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
+              </div>
+              <button
+                onClick={() => setDraft({
+                  id: i.id, name: i.name, price: String(i.price), stock: String(i.stock),
+                  category: i.category, low_stock_threshold: String(i.low_stock_threshold), file: null,
+                })}
+                className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+              >
+                Edit
+              </button>
+              <button onClick={() => deactivate(i)} aria-label={`Remove ${i.name}`} className="text-sm text-red-500 px-1.5 py-1 rounded-md">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draft && (
+        <div className="fixed inset-0 z-20 bg-ink-900/40 flex items-end md:items-center justify-center" onClick={() => setDraft(null)}>
+          <div className="bg-surface-raised rounded-t-xl md:rounded-xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display font-bold text-lg">{draft.id ? 'Edit item' : 'New item'}</h2>
+            <Field label="Name"><input className={inputCls} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Price (₱)"><input className={inputCls} inputMode="decimal" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} /></Field>
+              <Field label="Stock"><input className={inputCls} inputMode="numeric" value={draft.stock} onChange={(e) => setDraft({ ...draft, stock: e.target.value })} /></Field>
+              <Field label="Category"><input className={inputCls} value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} /></Field>
+              <Field label="Low stock alert"><input className={inputCls} inputMode="numeric" value={draft.low_stock_threshold} onChange={(e) => setDraft({ ...draft, low_stock_threshold: e.target.value })} /></Field>
+            </div>
+            <Field label="Photo">
+              <input type="file" accept="image/*" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} className="text-sm" />
+            </Field>
+            {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setDraft(null)} className="grow rounded-md bg-ink-900/5 py-3 font-medium">Cancel</button>
+              <button onClick={save} disabled={saving} className="grow rounded-md bg-ink-900 text-white py-3 font-medium disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500'
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-ink-500">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+===== FILE: src/pages/admin/Payments.tsx =====
+import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { compressImage } from '../../lib/image'
+import type { PaymentMethod } from '../../types'
+
+type Draft = {
+  id?: string
+  label: string
+  type: 'ewallet' | 'bank'
+  account_name: string
+  account_number: string
+  file?: File | null
+  existing_qr?: string
+}
+
+const EMPTY: Draft = { label: '', type: 'ewallet', account_name: '', account_number: '', file: null }
+
+export default function Payments() {
+  const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () =>
+    supabase.from('payment_methods').select('*').order('created_at')
+      .then(({ data }) => setMethods((data as PaymentMethod[]) ?? []))
+
+  useEffect(() => { load() }, [])
+
+  const save = async () => {
+    if (!draft) return
+    setSaving(true)
+    setError(null)
+    try {
+      // Validate before uploading
+      const label = draft.label.trim()
+      const account_name = draft.account_name.trim()
+      if (!label) throw new Error('Label is required')
+      if (!account_name) throw new Error('Account name is required')
+      if (!draft.id && !draft.file) throw new Error('A QR code image is required')
+
+      let qr_image_url = draft.existing_qr
+      if (draft.file) {
+        const blob = await compressImage(draft.file, 1000, 0.9)
+        const path = `${crypto.randomUUID()}.jpg`
+        const { error: upErr } = await supabase.storage
+          .from('qr-codes').upload(path, blob, { contentType: 'image/jpeg' })
+        if (upErr) throw upErr
+        qr_image_url = supabase.storage.from('qr-codes').getPublicUrl(path).data.publicUrl
+      }
+      const payload = {
+        label,
+        type: draft.type,
+        account_name,
+        account_number: draft.account_number.trim(),
+        qr_image_url,
+      }
+      const q = draft.id
+        ? supabase.from('payment_methods').update(payload).eq('id', draft.id)
+        : supabase.from('payment_methods').insert(payload)
+      const { error: dbErr } = await q
+      if (dbErr) throw dbErr
+      setDraft(null)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggle = async (m: PaymentMethod) => {
+    setError(null)
+    const { error: upErr } = await supabase.from('payment_methods').update({ is_active: !m.is_active }).eq('id', m.id)
+    if (upErr) {
+      setError(`Toggle failed: ${upErr.message}`)
+      return
+    }
+    await load()
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-bold">Payment methods</h1>
+        <button onClick={() => setDraft({ ...EMPTY })} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium">
+          + Add
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+      {methods.length === 0 ? (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-4xl" aria-hidden>💳</p>
+          <p className="text-ink-700 font-medium">No payment methods yet</p>
+          <p className="text-ink-500 text-sm">Add one so customers can pay for orders.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {methods.map((m) => (
+            <div key={m.id} className={`rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3 ${m.is_active ? '' : 'opacity-50'}`}>
+              <img src={m.qr_image_url} alt="" className="size-12 rounded-md object-cover" />
+              <div className="grow">
+                <p className="font-medium text-sm"><span aria-hidden>{m.type === 'ewallet' ? '📱' : '🏦'}</span> {m.label}</p>
+                <p className="text-xs text-ink-500">{m.account_name} {m.account_number && `· ${m.account_number}`}</p>
+              </div>
+              <button onClick={() => toggle(m)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">
+                {m.is_active ? 'Disable' : 'Enable'}
+              </button>
+              <button
+                onClick={() => setDraft({
+                  id: m.id, label: m.label, type: m.type, account_name: m.account_name,
+                  account_number: m.account_number, file: null, existing_qr: m.qr_image_url,
+                })}
+                className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+              >
+                Edit
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draft && (
+        <div className="fixed inset-0 z-20 bg-ink-900/40 flex items-end md:items-center justify-center" onClick={() => setDraft(null)}>
+          <div className="bg-surface-raised rounded-t-xl md:rounded-xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display font-bold text-lg">{draft.id ? 'Edit method' : 'New payment method'}</h2>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Label (e.g. GCash, BPI)</span>
+              <input className={inputCls} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+            </label>
+            <div className="flex gap-2">
+              {(['ewallet', 'bank'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setDraft({ ...draft, type: t })}
+                  className={`grow rounded-md py-2.5 text-sm font-medium ${draft.type === t ? 'bg-ink-900 text-white' : 'bg-ink-900/5'}`}
+                >
+                  {t === 'ewallet' ? '📱 E-wallet' : '🏦 Bank'}
+                </button>
+              ))}
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Account name</span>
+              <input className={inputCls} value={draft.account_name} onChange={(e) => setDraft({ ...draft, account_name: e.target.value })} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Account / mobile number</span>
+              <input className={inputCls} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">QR code image</span>
+              <input type="file" accept="image/*" className="text-sm" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} />
+            </label>
+            {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setDraft(null)} className="grow rounded-md bg-ink-900/5 py-3 font-medium">Cancel</button>
+              <button onClick={save} disabled={saving} className="grow rounded-md bg-ink-900 text-white py-3 font-medium disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500'
+
+===== FILE: src/pages/admin/AdminOrders.tsx =====
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { supabase } from '../../lib/supabase'
+import { formatPeso } from '../../lib/money'
+import type { Order, OrderStatus } from '../../types'
+
+interface OrderRow extends Order {
+  profiles: { full_name: string; email: string } | null
+}
+
+const FILTERS: (OrderStatus | 'all')[] = ['needs_review', 'all', 'paid', 'verifying', 'awaiting_payment', 'cancelled']
+
+export default function AdminOrders() {
+  const [params, setParams] = useSearchParams()
+  const filter = (params.get('filter') ?? 'needs_review') as OrderStatus | 'all'
+  const [orders, setOrders] = useState<OrderRow[]>([])
+  const [open, setOpen] = useState<string | null>(null)
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
+  const [receiptErr, setReceiptErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    let q = supabase.from('orders')
+      .select('*, profiles(full_name, email)')
+      .order('created_at', { ascending: false })
+      .limit(100)
+    if (filter !== 'all') q = q.eq('status', filter)
+    const { data } = await q
+    setOrders((data as OrderRow[]) ?? [])
+  }, [filter])
+
+  useEffect(() => { load() }, [load])
+
+  const openOrder = async (o: OrderRow) => {
+    setOpen(open === o.id ? null : o.id)
+    setReceiptUrl(null)
+    setReceiptErr(null)
+    if (o.receipt_image_url) {
+      const { data, error: urlErr } = await supabase.storage
+        .from('receipts').createSignedUrl(o.receipt_image_url, 300)
+      if (urlErr) {
+        setReceiptErr('Receipt could not be loaded: ' + urlErr.message)
+      } else {
+        setReceiptUrl(data?.signedUrl ?? null)
+      }
+    }
+  }
+
+  const approve = async (o: OrderRow) => {
+    setBusy(true)
+    const { error } = await supabase.rpc('confirm_order', { p_order_id: o.id, p_verdict: null })
+    setBusy(false)
+    if (error) { alert(error.message); return }
+    setOpen(null)
+    await load()
+  }
+
+  const reject = async (o: OrderRow) => {
+    if (!confirm('Cancel this order?')) return
+    setBusy(true)
+    const { error: rejErr } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id)
+    if (rejErr) {
+      alert(rejErr.message)
+      setBusy(false)
+      return
+    }
+    setBusy(false)
+    setOpen(null)
+    await load()
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+      <h1 className="font-display text-2xl font-bold">Orders</h1>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {FILTERS.map((f) => (
+          <button
+            key={f}
+            onClick={() => setParams({ filter: f })}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition ${
+              filter === f ? 'bg-ink-900 text-white' : 'bg-surface-raised text-ink-500 shadow-card'
+            }`}
+          >
+            {f.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {orders.length === 0 && (
+          <div className="text-center py-12 space-y-2">
+            <p className="text-4xl" aria-hidden>🧾</p>
+            <p className="text-ink-700 font-medium">Nothing here</p>
+            <p className="text-ink-500 text-sm">No orders match this filter.</p>
+          </div>
+        )}
+        {orders.map((o) => (
+          <div key={o.id} className="rounded-lg bg-surface-raised shadow-card overflow-hidden">
+            <button onClick={() => openOrder(o)} className="w-full p-3 flex items-center justify-between text-left">
+              <div>
+                <p className="font-medium text-sm">{o.profiles?.full_name || o.profiles?.email || 'Unknown'}</p>
+                <p className="text-xs text-ink-500">{new Date(o.created_at).toLocaleString()}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold tabular-nums">{formatPeso(o.total)}</p>
+                <p className="text-xs capitalize text-ink-500">{o.status.replace('_', ' ')}</p>
+              </div>
+            </button>
+
+            {open === o.id && (
+              <div className="border-t border-line p-3 space-y-3">
+                {o.ai_verdict && (
+                  <div className="rounded-md bg-surface p-3 text-sm space-y-1">
+                    <p><b>AI verdict:</b> {o.ai_verdict.verdict}</p>
+                    <p><b>Read amount:</b> {o.ai_verdict.extracted.amount != null ? formatPeso(o.ai_verdict.extracted.amount) : '—'}</p>
+                    <p><b>Reference:</b> {o.ai_verdict.extracted.reference ?? '—'}</p>
+                    <p className="text-ink-500">{o.ai_verdict.reason}</p>
+                  </div>
+                )}
+                {receiptErr
+                  ? <p className="text-xs text-red-600" role="alert">{receiptErr}</p>
+                  : receiptUrl
+                  ? <img src={receiptUrl} alt="Receipt" className="rounded-md max-h-96 mx-auto" />
+                  : o.receipt_image_url && <p className="text-xs text-ink-500">Loading receipt…</p>}
+                {['needs_review', 'verifying', 'awaiting_payment'].includes(o.status) && (
+                  <div className="flex gap-2">
+                    <button onClick={() => reject(o)} disabled={busy} className="grow rounded-md bg-red-50 text-red-600 py-3 font-medium disabled:opacity-50">
+                      Reject
+                    </button>
+                    <button onClick={() => approve(o)} disabled={busy} className="grow rounded-md bg-green-600 text-white py-3 font-medium disabled:opacity-50">
+                      Approve & mark paid
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+===== FILE: src/pages/admin/Restock.tsx =====
+import { useRef, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { compressImage } from '../../lib/image'
+import type { RestockDetection } from '../../types'
+
+type Line = RestockDetection & { include: boolean; price: string }
+type Phase = 'idle' | 'analyzing' | 'review' | 'applying' | 'done'
+
+export default function Restock() {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [lines, setLines] = useState<Line[]>([])
+  const [preview, setPreview] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const analyze = async (file: File) => {
+    setError(null)
+    setPhase('analyzing')
+    setPreview(URL.createObjectURL(file))
+    try {
+      const blob = await compressImage(file, 1600, 0.85)
+      const path = `${crypto.randomUUID()}.jpg`
+      const { error: upErr } = await supabase.storage
+        .from('restock-photos').upload(path, blob, { contentType: 'image/jpeg' })
+      if (upErr) throw upErr
+
+      const { data, error: fnErr } = await supabase.functions.invoke('analyze-shelf', {
+        body: { photo_path: path },
+      })
+      if (fnErr) throw fnErr
+      const detections = (data.detections ?? []) as RestockDetection[]
+      setSessionId(data.session_id)
+      setLines(detections.map((d) => ({
+        ...d,
+        include: true,
+        price: d.suggested_price != null ? String(d.suggested_price) : '',
+      })))
+      setPhase('review')
+    } catch (e) {
+      setPhase('idle')
+      setError(e instanceof Error ? e.message : 'Analysis failed — try again.')
+    }
+  }
+
+  const apply = async () => {
+    setPhase('applying')
+    setError(null)
+    const payload = lines
+      .filter((l) => l.include && l.qty > 0)
+      .map((l) => ({
+        item_id: l.matched_item_id,
+        name: l.name,
+        price: l.price ? Number(l.price) : 0,
+        qty: l.qty,
+        category: 'snacks',
+      }))
+    const { error: rpcErr } = await supabase.rpc('apply_restock', {
+      p_session_id: sessionId,
+      p_lines: payload,
+    })
+    if (rpcErr) {
+      setPhase('review')
+      setError(rpcErr.message)
+      return
+    }
+    setPhase('done')
+  }
+
+  const reset = () => {
+    setPhase('idle'); setLines([]); setSessionId(null); setPreview(null); setError(null)
+  }
+
+  const edit = (i: number, patch: Partial<Line>) =>
+    setLines((all) => all.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+
+  return (
+    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+      <h1 className="font-display text-2xl font-bold"><span aria-hidden>📷</span> AI Restock</h1>
+      <input
+        ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={(e) => e.target.files?.[0] && analyze(e.target.files[0])}
+      />
+
+      {phase === 'idle' && (
+        <div className="rounded-xl bg-surface-raised p-8 shadow-card text-center space-y-4">
+          <p className="text-5xl" aria-hidden>🥡</p>
+          <p className="text-ink-500 text-sm">
+            Snap a photo of the shelf or a new delivery.<br />
+            Claude will count items and match them to your catalog.
+          </p>
+          <button onClick={() => fileRef.current?.click()} className="rounded-lg bg-brand-600 text-white px-6 py-3.5 font-bold">
+            Take / upload photo
+          </button>
+          {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+        </div>
+      )}
+
+      {phase === 'analyzing' && (
+        <div className="rounded-xl bg-surface-raised p-8 shadow-card text-center space-y-4">
+          {preview && <img src={preview} alt="" className="rounded-md max-h-64 mx-auto" />}
+          <p className="text-ink-500 animate-pulse">Counting snacks with AI…</p>
+        </div>
+      )}
+
+      {(phase === 'review' || phase === 'applying') && (
+        <div className="space-y-3">
+          {preview && <img src={preview} alt="" className="rounded-md max-h-48 mx-auto" />}
+          {lines.length === 0 && <p className="text-center text-ink-500">Nothing detected. Try a clearer photo.</p>}
+          {lines.map((l, i) => (
+            <div key={i} className={`rounded-lg bg-surface-raised p-3 shadow-card space-y-2 ${l.include ? '' : 'opacity-40'}`}>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={l.include} onChange={(e) => edit(i, { include: e.target.checked })} aria-label={`Include ${l.name}`} className="size-4 accent-brand-600" />
+                <input
+                  value={l.name}
+                  onChange={(e) => edit(i, { name: e.target.value })}
+                  aria-label="Item name"
+                  className="grow font-medium text-sm bg-transparent outline-none rounded-md"
+                />
+                <span className={`text-[10px] rounded-full px-2 py-0.5 font-medium ${
+                  l.confidence === 'high' ? 'bg-green-50 text-green-700'
+                  : l.confidence === 'medium' ? 'bg-amber-50 text-amber-700'
+                  : 'bg-red-50 text-red-600'
+                }`}>
+                  {l.confidence}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 pl-6 text-sm">
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.matched_item_id ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                  {l.matched_item_id ? 'restock' : 'new item'}
+                </span>
+                <label className="flex items-center gap-1">
+                  qty
+                  <input
+                    inputMode="numeric" value={l.qty}
+                    onChange={(e) => edit(i, { qty: Number(e.target.value) || 0 })}
+                    className="w-14 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+                  />
+                </label>
+                {!l.matched_item_id && (
+                  <label className="flex items-center gap-1">
+                    ₱
+                    <input
+                      inputMode="decimal" value={l.price}
+                      onChange={(e) => edit(i, { price: e.target.value })}
+                      className="w-16 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          ))}
+          {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={reset} className="grow rounded-lg bg-ink-900/5 py-3.5 font-medium">Discard</button>
+            <button
+              onClick={apply}
+              disabled={phase === 'applying' || lines.every((l) => !l.include)}
+              className="grow rounded-lg bg-green-600 text-white py-3.5 font-bold disabled:opacity-50"
+            >
+              {phase === 'applying' ? 'Applying…' : 'Apply to inventory'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === 'done' && (
+        <div className="rounded-xl bg-green-50 p-8 text-center space-y-3">
+          <p className="text-4xl" aria-hidden>✅</p>
+          <p className="font-bold text-green-800">Inventory updated</p>
+          <button onClick={reset} className="text-brand-600 font-semibold rounded-md">Scan another photo</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+===== FILE: src/App.tsx =====
+import { Routes, Route } from 'react-router'
+import Login from './pages/Login'
+import Store from './pages/Store'
+import Cart from './pages/Cart'
+import Pay from './pages/Pay'
+import Orders from './pages/Orders'
+import AdminLayout from './pages/admin/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+import Items from './pages/admin/Items'
+import Payments from './pages/admin/Payments'
+import AdminOrders from './pages/admin/AdminOrders'
+import Restock from './pages/admin/Restock'
+import { RequireAuth, RequireAdmin } from './components/guards'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<RequireAuth><Store /></RequireAuth>} />
+      <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
+      <Route path="/pay/:orderId" element={<RequireAuth><Pay /></RequireAuth>} />
+      <Route path="/orders" element={<RequireAuth><Orders /></RequireAuth>} />
+      <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+        <Route index element={<Dashboard />} />
+        <Route path="items" element={<Items />} />
+        <Route path="payments" element={<Payments />} />
+        <Route path="orders" element={<AdminOrders />} />
+        <Route path="restock" element={<Restock />} />
+      </Route>
+    </Routes>
+  )
+}
+
+===== FILE: src/components/guards.tsx =====
+import type { ReactNode } from 'react'
+import { Navigate } from 'react-router'
+import { useAuth } from '../context/AuthContext'
+
+function Splash() {
+  return (
+    <div className="min-h-dvh flex flex-col items-center justify-center gap-2 text-ink-500">
+      <span className="text-3xl animate-pulse" aria-hidden>🍿</span>
+      <span className="text-sm">Loading…</span>
+    </div>
+  )
+}
+
+export function RequireAuth({ children }: { children: ReactNode }) {
+  const { session, loading } = useAuth()
+  if (loading) return <Splash />
+  if (!session) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const { session, profile, loading } = useAuth()
+  if (loading) return <Splash />
+  if (!session) return <Navigate to="/login" replace />
+  if (!profile?.is_admin) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
