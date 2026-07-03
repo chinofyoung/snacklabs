@@ -43,11 +43,29 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } },
   )
   const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '')
-  const { data: { user } } = await userClient.auth.getUser(token)
-  if (!user) return json({ error: 'unauthenticated' }, 401)
-  const { data: profile } = await userClient
-    .from('profiles').select('is_admin').eq('id', user.id).single()
-  if (!profile?.is_admin) return json({ error: 'admin only' }, 403)
+  if (!token) return json({ error: 'unauthenticated' }, 401)
+
+  // Authorize via the PostgREST path (the mechanism verify-payment uses successfully),
+  // not GoTrue getUser() which is unreliable in this Edge runtime.
+  const { data: isAdmin, error: adminErr } = await userClient.rpc('is_admin')
+  if (adminErr) return json({ error: 'unauthenticated' }, 401)
+  if (!isAdmin) return json({ error: 'admin only' }, 403)
+
+  // Derive the caller's user id from the JWT `sub` claim for admin_id.
+  // Authorization was already verified above via is_admin() (which checks auth.uid()
+  // against the profiles table through a cryptographically-validated PostgREST request),
+  // so reading the sub claim here is safe.
+  function decodeSub(jwt: string): string | null {
+    try {
+      const part = jwt.split('.')[1]
+      const b64 = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')
+      return JSON.parse(atob(b64)).sub ?? null
+    } catch {
+      return null
+    }
+  }
+  const userId = decodeSub(token)
+  if (!userId) return json({ error: 'unauthenticated' }, 401)
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -110,7 +128,7 @@ Deno.serve(async (req) => {
 
   const { data: session, error: insErr } = await admin
     .from('restock_sessions')
-    .insert({ admin_id: user.id, photo_url: photo_path, ai_result: result })
+    .insert({ admin_id: userId, photo_url: photo_path, ai_result: result })
     .select('id')
     .single()
   if (insErr) return json({ error: insErr.message }, 500)
