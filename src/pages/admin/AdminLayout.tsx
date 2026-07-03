@@ -1,10 +1,11 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { ArrowLeft, CupSoda, LayoutDashboard, Popcorn, ReceiptText, Settings, Store } from 'lucide-react'
+import { ArrowLeft, CupSoda, LayoutDashboard, Popcorn, ReceiptText, Settings, Store, Users } from 'lucide-react'
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/items', label: 'Items', icon: CupSoda, end: false },
   { to: '/admin/orders', label: 'Orders', icon: ReceiptText, end: false },
+  { to: '/admin/users', label: 'Users', icon: Users, end: false },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
 

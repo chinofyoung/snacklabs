@@ -7,6 +7,7 @@ import Orders from './pages/Orders'
 import AdminLayout from './pages/admin/AdminLayout'
 import Dashboard from './pages/admin/Dashboard'
 import Items from './pages/admin/Items'
+import Users from './pages/admin/Users'
 import Settings from './pages/admin/Settings'
 import AdminOrders from './pages/admin/AdminOrders'
 import Restock from './pages/admin/Restock'
@@ -23,6 +24,7 @@ export default function App() {
       <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
         <Route index element={<Dashboard />} />
         <Route path="items" element={<Items />} />
+        <Route path="users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
         <Route path="payments" element={<Navigate to="/admin/settings" replace />} />
         <Route path="orders" element={<AdminOrders />} />
