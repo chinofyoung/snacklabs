@@ -74,6 +74,13 @@ Deno.serve(async (req) => {
     return json({ status: 'needs_review' })
   }
 
+  const { data: settings } = await admin
+    .from('app_settings').select('payment_ai_enabled, payment_ai_model').eq('id', true).single()
+  const aiEnabled = settings?.payment_ai_enabled ?? true
+  const model = settings?.payment_ai_model ?? 'claude-opus-4-8'
+
+  if (!aiEnabled) return parkForReview('AI verification is turned off — awaiting admin review.', null)
+
   // Download receipt image
   const { data: blob, error: dlErr } = await admin.storage.from('receipts').download(receipt_path)
   if (dlErr || !blob) return parkForReview('receipt image could not be read', null)
@@ -86,34 +93,46 @@ Deno.serve(async (req) => {
   b64 = btoa(b64)
   const mediaType = blob.type === 'image/png' ? 'image/png' : 'image/jpeg'
 
-  // Ask Claude to read the receipt
+  const isCash = method?.type === 'cash'
+
+  const promptText = isCash
+    ? [
+        'This is a photo of physical Philippine peso cash (banknotes and/or coins) a customer is paying for an office-pantry purchase.',
+        `Amount due: PHP ${order.total}.`,
+        'Identify each visible denomination (₱1000/500/200/100/50/20 notes; ₱20/10/5/1 coins) and sum the clearly-visible total.',
+        "Set verdict 'pass' ONLY if it is genuinely a photo of real cash AND the clearly-visible total is at least the amount due.",
+        "'fail' if the visible cash is clearly less than due or the image is not cash.",
+        "'unsure' if blurry, partially hidden, or ambiguous.",
+        'Set extracted.amount = the total pesos you counted; set recipient, reference, and timestamp to null.',
+      ].join('\n')
+    : [
+        'You are verifying a payment confirmation screenshot for an office pantry purchase.',
+        `Expected amount: PHP ${order.total}.`,
+        `Expected recipient: "${method?.account_name ?? 'unknown'}" via ${method?.label ?? 'unknown'} (account number ending in "${(method?.account_number ?? '').slice(-4)}").`,
+        '',
+        'Rubric:',
+        '- verdict "pass" ONLY if this is clearly a genuine payment success screen, the amount exactly matches, and the recipient plausibly matches.',
+        '- verdict "fail" if the amount or recipient clearly does not match, or the image is not a payment confirmation.',
+        '- verdict "unsure" if anything is ambiguous, cropped, edited-looking, or unreadable.',
+        'Extract the paid amount as a number, the recipient name, the reference/transaction number, and the payment timestamp. Use null for anything not visible.',
+        'Explain briefly in "reason".',
+      ].join('\n')
+
+  // Ask Claude to read the receipt / cash photo
   let verdict: AiVerdictResult
   let usage: Anthropic.Messages.Usage | undefined
   try {
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! })
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-8',
+      model,
       max_tokens: 2048,
+      thinking: { type: 'disabled' },
       output_config: { format: { type: 'json_schema', schema: VERDICT_SCHEMA } },
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
-          {
-            type: 'text',
-            text: [
-              'You are verifying a payment confirmation screenshot for an office pantry purchase.',
-              `Expected amount: PHP ${order.total}.`,
-              `Expected recipient: "${method?.account_name ?? 'unknown'}" via ${method?.label ?? 'unknown'} (account number ending in "${(method?.account_number ?? '').slice(-4)}").`,
-              '',
-              'Rubric:',
-              '- verdict "pass" ONLY if this is clearly a genuine payment success screen, the amount exactly matches, and the recipient plausibly matches.',
-              '- verdict "fail" if the amount or recipient clearly does not match, or the image is not a payment confirmation.',
-              '- verdict "unsure" if anything is ambiguous, cropped, edited-looking, or unreadable.',
-              'Extract the paid amount as a number, the recipient name, the reference/transaction number, and the payment timestamp. Use null for anything not visible.',
-              'Explain briefly in "reason".',
-            ].join('\n'),
-          },
+          { type: 'text', text: promptText },
         ],
       }],
     })
@@ -127,7 +146,7 @@ Deno.serve(async (req) => {
 
   // Log AI usage cost (best-effort; never breaks verification)
   try {
-    const cost = computeCost(usage ?? {}, 'claude-opus-4-8')
+    const cost = computeCost(usage ?? {}, model)
     await admin.from('ai_usage').insert({
       fn: 'verify-payment',
       order_id,
@@ -140,9 +159,9 @@ Deno.serve(async (req) => {
     })
   } catch (_) { /* usage logging must never break verification */ }
 
-  // Reference reuse check (blocks screenshot replay)
+  // Reference reuse check (blocks screenshot replay) — not applicable to cash
   let refAlreadyUsed = false
-  if (verdict.extracted.reference) {
+  if (!isCash && verdict.extracted.reference) {
     const { count, error: refErr } = await admin
       .from('orders')
       .select('id', { count: 'exact', head: true })
@@ -153,7 +172,7 @@ Deno.serve(async (req) => {
     refAlreadyUsed = (count ?? 0) > 0
   }
 
-  const decision = decideOrderStatus(verdict, Number(order.total), refAlreadyUsed)
+  const decision = decideOrderStatus(verdict, Number(order.total), refAlreadyUsed, isCash)
 
   if (decision === 'paid') {
     const { error: confirmErr } = await admin.rpc('confirm_order', {

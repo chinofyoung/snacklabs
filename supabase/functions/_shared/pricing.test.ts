@@ -27,6 +27,15 @@ describe('computeCost (claude-sonnet-5)', () => {
   })
 })
 
+describe('computeCost (claude-haiku-4-5)', () => {
+  it('prices input + output', () => {
+    // 1000 in @ $1/M = 0.001 ; 500 out @ $5/M = 0.0025 ; total 0.0035
+    const c = computeCost({ input_tokens: 1000, output_tokens: 500 }, 'claude-haiku-4-5')
+    expect(c.cost_usd).toBeCloseTo(0.0035, 6)
+    expect(c.cost_php).toBeCloseTo(0.0035 * USD_TO_PHP, 6)
+  })
+})
+
 describe('computeCost (unknown model)', () => {
   it('falls back to opus-4-8 rates', () => {
     const c = computeCost({ input_tokens: 1000, output_tokens: 500 }, 'some-future-model')

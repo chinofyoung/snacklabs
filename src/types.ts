@@ -12,11 +12,16 @@ export interface Item {
 export interface PaymentMethod {
   id: string
   label: string
-  type: 'ewallet' | 'bank'
-  qr_image_url: string
+  type: 'ewallet' | 'bank' | 'cash'
+  qr_image_url: string | null
   account_name: string
   account_number: string
   is_active: boolean
+}
+
+export interface AppSettings {
+  payment_ai_enabled: boolean
+  payment_ai_model: 'claude-haiku-4-5' | 'claude-sonnet-5' | 'claude-opus-4-8'
 }
 
 export type OrderStatus =

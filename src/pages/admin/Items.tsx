@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { CupSoda, ShoppingBasket, X } from 'lucide-react'
+import { useNavigate } from 'react-router'
+import { Camera, CupSoda, ShoppingBasket, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import { compressImage } from '../../lib/image'
@@ -18,6 +19,7 @@ type Draft = {
 const EMPTY: Draft = { name: '', price: '', stock: '0', category: 'snacks', low_stock_threshold: '3', file: null }
 
 export default function Items() {
+  const navigate = useNavigate()
   const [items, setItems] = useState<Item[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
@@ -101,12 +103,21 @@ export default function Items() {
     <div className="p-4 md:p-8 space-y-4 max-w-3xl">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Items</h1>
-        <button
-          onClick={() => setDraft({ ...EMPTY })}
-          className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium"
-        >
-          + Add item
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDraft({ ...EMPTY })}
+            className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium"
+          >
+            + Add item
+          </button>
+          <button
+            onClick={() => navigate('/admin/restock')}
+            aria-label="AI restock"
+            className="rounded-md bg-brand-600 text-white p-2.5"
+          >
+            <Camera className="size-5" strokeWidth={2.5} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600" role="alert">{error}</p>}

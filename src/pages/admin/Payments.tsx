@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CreditCard, Landmark, Smartphone } from 'lucide-react'
+import { Banknote, CreditCard, Landmark, Smartphone } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { compressImage } from '../../lib/image'
 import type { PaymentMethod } from '../../types'
@@ -7,16 +7,16 @@ import type { PaymentMethod } from '../../types'
 type Draft = {
   id?: string
   label: string
-  type: 'ewallet' | 'bank'
+  type: 'ewallet' | 'bank' | 'cash'
   account_name: string
   account_number: string
   file?: File | null
-  existing_qr?: string
+  existing_qr?: string | null
 }
 
 const EMPTY: Draft = { label: '', type: 'ewallet', account_name: '', account_number: '', file: null }
 
-export default function Payments() {
+export default function PaymentMethods() {
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
@@ -38,10 +38,10 @@ export default function Payments() {
       const account_name = draft.account_name.trim()
       if (!label) throw new Error('Label is required')
       if (!account_name) throw new Error('Account name is required')
-      if (!draft.id && !draft.file) throw new Error('A QR code image is required')
+      if (draft.type !== 'cash' && !draft.id && !draft.file) throw new Error('A QR code image is required')
 
-      let qr_image_url = draft.existing_qr
-      if (draft.file) {
+      let qr_image_url: string | null = draft.type === 'cash' ? null : (draft.existing_qr ?? null)
+      if (draft.type !== 'cash' && draft.file) {
         const blob = await compressImage(draft.file, 1000, 0.9)
         const path = `${crypto.randomUUID()}.jpg`
         const { error: upErr } = await supabase.storage
@@ -81,9 +81,9 @@ export default function Payments() {
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">Payment methods</h1>
+        <h2 className="font-display text-lg font-bold">Payment methods</h2>
         <button onClick={() => setDraft({ ...EMPTY })} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium">
           + Add
         </button>
@@ -101,12 +101,18 @@ export default function Payments() {
         <div className="space-y-2">
           {methods.map((m) => (
             <div key={m.id} className={`rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3 ${m.is_active ? '' : 'opacity-50'}`}>
-              <img src={m.qr_image_url} alt="" className="size-12 rounded-md object-cover" />
+              {m.qr_image_url ? (
+                <img src={m.qr_image_url} alt="" className="size-12 rounded-md object-cover" />
+              ) : (
+                <div className="size-12 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
+                  <Banknote className="size-6 text-brand-600/60" strokeWidth={2.5} aria-hidden="true" />
+                </div>
+              )}
               <div className="grow">
                 <p className="font-medium text-sm flex items-center gap-1.5">
-                  {m.type === 'ewallet'
-                    ? <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />
-                    : <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.type === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.type === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.type === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
                   {m.label}
                 </p>
                 <p className="text-xs text-ink-500">{m.account_name} {m.account_number && `· ${m.account_number}`}</p>
@@ -137,31 +143,39 @@ export default function Payments() {
               <input className={inputCls} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
             </label>
             <div className="flex gap-2">
-              {(['ewallet', 'bank'] as const).map((t) => (
+              {(['ewallet', 'bank', 'cash'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setDraft({ ...draft, type: t })}
                   className={`grow rounded-md py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 ${draft.type === t ? 'bg-ink-900 text-white' : 'bg-ink-900/5'}`}
                 >
-                  {t === 'ewallet'
-                    ? <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />
-                    : <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
-                  {t === 'ewallet' ? 'E-wallet' : 'Bank'}
+                  {t === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {t === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {t === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {t === 'ewallet' ? 'E-wallet' : t === 'bank' ? 'Bank' : 'Cash'}
                 </button>
               ))}
             </div>
             <label className="block space-y-1">
-              <span className="text-xs font-medium text-ink-500">Account name</span>
+              <span className="text-xs font-medium text-ink-500">
+                {draft.type === 'cash' ? 'Label / where to pay' : 'Account name'}
+              </span>
               <input className={inputCls} value={draft.account_name} onChange={(e) => setDraft({ ...draft, account_name: e.target.value })} />
             </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-ink-500">Account / mobile number</span>
-              <input className={inputCls} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-ink-500">QR code image</span>
-              <input type="file" accept="image/*" className="text-sm" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} />
-            </label>
+            {draft.type !== 'cash' && (
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-ink-500">Account / mobile number</span>
+                <input className={inputCls} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} />
+              </label>
+            )}
+            {draft.type === 'cash' ? (
+              <p className="text-xs text-ink-500">No QR needed for cash.</p>
+            ) : (
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-ink-500">QR code image</span>
+                <input type="file" accept="image/*" className="text-sm" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} />
+              </label>
+            )}
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
             <div className="flex gap-2 pt-1">
               <button onClick={() => setDraft(null)} className="grow rounded-md bg-ink-900/5 py-3 font-medium">Cancel</button>

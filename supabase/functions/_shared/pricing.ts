@@ -14,6 +14,12 @@ const MODEL_RATES: Record<string, { input: number; output: number; cacheRead: nu
     cacheRead: 0.3 / 1_000_000,
     cacheWrite: 3.75 / 1_000_000,
   },
+  'claude-haiku-4-5': {
+    input: 1 / 1_000_000,
+    output: 5 / 1_000_000,
+    cacheRead: 0.1 / 1_000_000,
+    cacheWrite: 1.25 / 1_000_000,
+  },
 }
 
 const DEFAULT_RATES = MODEL_RATES['claude-opus-4-8']

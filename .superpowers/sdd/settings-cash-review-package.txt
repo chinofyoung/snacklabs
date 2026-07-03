@@ -1,0 +1,1200 @@
+===== supabase/functions/verify-payment/index.ts =====
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import Anthropic from 'npm:@anthropic-ai/sdk'
+import { decideOrderStatus, type AiVerdictResult } from '../_shared/verdict.ts'
+import { computeCost } from '../_shared/pricing.ts'
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+const VERDICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['pass', 'fail', 'unsure'] },
+    extracted: {
+      type: 'object',
+      properties: {
+        amount: { type: ['number', 'null'] },
+        recipient: { type: ['string', 'null'] },
+        reference: { type: ['string', 'null'] },
+        timestamp: { type: ['string', 'null'] },
+      },
+      required: ['amount', 'recipient', 'reference', 'timestamp'],
+      additionalProperties: false,
+    },
+    reason: { type: 'string' },
+  },
+  required: ['verdict', 'extracted', 'reason'],
+  additionalProperties: false,
+} as const
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+
+  const { order_id, receipt_path } = await req.json().catch(() => ({}))
+  if (!order_id || !receipt_path) return json({ error: 'order_id and receipt_path required' }, 400)
+
+  // Client scoped to the calling user (validates JWT + ownership via RLS)
+  const userClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } },
+  )
+  // Service client for privileged updates
+  const admin = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
+
+  const { data: order, error: orderErr } = await userClient
+    .from('orders').select('*').eq('id', order_id).single()
+  if (orderErr || !order) return json({ error: 'order not found' }, 404)
+  if (!['awaiting_payment', 'needs_review'].includes(order.status)) {
+    return json({ error: `order is ${order.status}` }, 409)
+  }
+  if (!receipt_path.startsWith(`${order.user_id}/`)) {
+    return json({ error: 'invalid receipt path' }, 403)
+  }
+
+  const { data: method } = await admin
+    .from('payment_methods').select('*').eq('id', order.payment_method_id).single()
+
+  // Mark verifying + attach receipt
+  await admin.from('orders')
+    .update({ status: 'verifying', receipt_image_url: receipt_path })
+    .eq('id', order_id)
+
+  const parkForReview = async (reason: string, verdict: AiVerdictResult | null) => {
+    await admin.from('orders')
+      .update({ status: 'needs_review', ai_verdict: verdict ?? { verdict: 'unsure', extracted: { amount: null, recipient: null, reference: null, timestamp: null }, reason } })
+      .eq('id', order_id)
+    return json({ status: 'needs_review' })
+  }
+
+  const { data: settings } = await admin
+    .from('app_settings').select('payment_ai_enabled, payment_ai_model').eq('id', true).single()
+  const aiEnabled = settings?.payment_ai_enabled ?? true
+  const model = settings?.payment_ai_model ?? 'claude-opus-4-8'
+
+  if (!aiEnabled) return parkForReview('AI verification is turned off — awaiting admin review.', null)
+
+  // Download receipt image
+  const { data: blob, error: dlErr } = await admin.storage.from('receipts').download(receipt_path)
+  if (dlErr || !blob) return parkForReview('receipt image could not be read', null)
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let b64 = ''
+  const CHUNK = 8192
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  b64 = btoa(b64)
+  const mediaType = blob.type === 'image/png' ? 'image/png' : 'image/jpeg'
+
+  const isCash = method?.type === 'cash'
+
+  const promptText = isCash
+    ? [
+        'This is a photo of physical Philippine peso cash (banknotes and/or coins) a customer is paying for an office-pantry purchase.',
+        `Amount due: PHP ${order.total}.`,
+        'Identify each visible denomination (₱1000/500/200/100/50/20 notes; ₱20/10/5/1 coins) and sum the clearly-visible total.',
+        "Set verdict 'pass' ONLY if it is genuinely a photo of real cash AND the clearly-visible total is at least the amount due.",
+        "'fail' if the visible cash is clearly less than due or the image is not cash.",
+        "'unsure' if blurry, partially hidden, or ambiguous.",
+        'Set extracted.amount = the total pesos you counted; set recipient, reference, and timestamp to null.',
+      ].join('\n')
+    : [
+        'You are verifying a payment confirmation screenshot for an office pantry purchase.',
+        `Expected amount: PHP ${order.total}.`,
+        `Expected recipient: "${method?.account_name ?? 'unknown'}" via ${method?.label ?? 'unknown'} (account number ending in "${(method?.account_number ?? '').slice(-4)}").`,
+        '',
+        'Rubric:',
+        '- verdict "pass" ONLY if this is clearly a genuine payment success screen, the amount exactly matches, and the recipient plausibly matches.',
+        '- verdict "fail" if the amount or recipient clearly does not match, or the image is not a payment confirmation.',
+        '- verdict "unsure" if anything is ambiguous, cropped, edited-looking, or unreadable.',
+        'Extract the paid amount as a number, the recipient name, the reference/transaction number, and the payment timestamp. Use null for anything not visible.',
+        'Explain briefly in "reason".',
+      ].join('\n')
+
+  // Ask Claude to read the receipt / cash photo
+  let verdict: AiVerdictResult
+  let usage: Anthropic.Messages.Usage | undefined
+  try {
+    const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! })
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: 2048,
+      thinking: { type: 'disabled' },
+      output_config: { format: { type: 'json_schema', schema: VERDICT_SCHEMA } },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+          { type: 'text', text: promptText },
+        ],
+      }],
+    })
+    const text = response.content.find((b) => b.type === 'text')
+    if (!text || text.type !== 'text') throw new Error('no text block')
+    verdict = JSON.parse(text.text) as AiVerdictResult
+    usage = response.usage
+  } catch (e) {
+    return parkForReview(`AI verification unavailable: ${e instanceof Error ? e.message : e}`, null)
+  }
+
+  // Log AI usage cost (best-effort; never breaks verification)
+  try {
+    const cost = computeCost(usage ?? {}, model)
+    await admin.from('ai_usage').insert({
+      fn: 'verify-payment',
+      order_id,
+      input_tokens: usage?.input_tokens ?? 0,
+      output_tokens: usage?.output_tokens ?? 0,
+      cache_read_tokens: usage?.cache_read_input_tokens ?? 0,
+      cache_creation_tokens: usage?.cache_creation_input_tokens ?? 0,
+      cost_usd: cost.cost_usd,
+      cost_php: cost.cost_php,
+    })
+  } catch (_) { /* usage logging must never break verification */ }
+
+  // Reference reuse check (blocks screenshot replay) — not applicable to cash
+  let refAlreadyUsed = false
+  if (!isCash && verdict.extracted.reference) {
+    const { count, error: refErr } = await admin
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'paid')
+      .neq('id', order_id)
+      .eq('ai_verdict->extracted->>reference', verdict.extracted.reference)
+    if (refErr) return parkForReview('reference reuse check unavailable: ' + refErr.message, verdict)
+    refAlreadyUsed = (count ?? 0) > 0
+  }
+
+  const decision = decideOrderStatus(verdict, Number(order.total), refAlreadyUsed, isCash)
+
+  if (decision === 'paid') {
+    const { error: confirmErr } = await admin.rpc('confirm_order', {
+      p_order_id: order_id,
+      p_verdict: verdict,
+    })
+    if (confirmErr) return parkForReview(`stock confirmation failed: ${confirmErr.message}`, verdict)
+    return json({ status: 'paid' })
+  }
+
+  if (refAlreadyUsed) verdict.reason = `Reference number already used on another paid order. ${verdict.reason}`
+  return parkForReview(verdict.reason, verdict)
+})
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS },
+  })
+}
+
+===== supabase/functions/_shared/verdict.ts =====
+export interface AiVerdictResult {
+  verdict: 'pass' | 'fail' | 'unsure'
+  extracted: {
+    amount: number | null
+    recipient: string | null
+    reference: string | null
+    timestamp: string | null
+  }
+  reason: string
+}
+
+export function decideOrderStatus(
+  v: AiVerdictResult,
+  orderTotal: number,
+  refAlreadyUsed: boolean,
+  isCash = false,
+): 'paid' | 'needs_review' {
+  if (v.verdict !== 'pass') return 'needs_review'
+  if (v.extracted.amount === null) return 'needs_review'
+
+  if (isCash) {
+    if (v.extracted.amount >= orderTotal - 0.009) return 'paid'
+    return 'needs_review'
+  }
+
+  if (refAlreadyUsed) return 'needs_review'
+  if (Math.abs(v.extracted.amount - orderTotal) > 0.009) return 'needs_review'
+  return 'paid'
+}
+
+===== supabase/functions/_shared/pricing.ts =====
+export const USD_TO_PHP = 58.50
+
+// USD per token, by model. Unknown models fall back to opus-4-8 rates (safe over-estimate).
+const MODEL_RATES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  'claude-opus-4-8': {
+    input: 5 / 1_000_000,
+    output: 25 / 1_000_000,
+    cacheRead: 0.5 / 1_000_000,
+    cacheWrite: 6.25 / 1_000_000,
+  },
+  'claude-sonnet-5': {
+    input: 3 / 1_000_000,
+    output: 15 / 1_000_000,
+    cacheRead: 0.3 / 1_000_000,
+    cacheWrite: 3.75 / 1_000_000,
+  },
+  'claude-haiku-4-5': {
+    input: 1 / 1_000_000,
+    output: 5 / 1_000_000,
+    cacheRead: 0.1 / 1_000_000,
+    cacheWrite: 1.25 / 1_000_000,
+  },
+}
+
+const DEFAULT_RATES = MODEL_RATES['claude-opus-4-8']
+
+export interface Usage {
+  input_tokens?: number | null
+  output_tokens?: number | null
+  cache_read_input_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+}
+
+export function computeCost(u: Usage, model: string): { cost_usd: number; cost_php: number } {
+  const rates = MODEL_RATES[model] ?? DEFAULT_RATES
+  const usd =
+    (u.input_tokens ?? 0) * rates.input +
+    (u.output_tokens ?? 0) * rates.output +
+    (u.cache_read_input_tokens ?? 0) * rates.cacheRead +
+    (u.cache_creation_input_tokens ?? 0) * rates.cacheWrite
+  return { cost_usd: usd, cost_php: usd * USD_TO_PHP }
+}
+
+===== src/types.ts =====
+export interface Item {
+  id: string
+  name: string
+  price: number
+  stock: number
+  image_url: string | null
+  category: string
+  low_stock_threshold: number
+  is_active: boolean
+}
+
+export interface PaymentMethod {
+  id: string
+  label: string
+  type: 'ewallet' | 'bank' | 'cash'
+  qr_image_url: string | null
+  account_name: string
+  account_number: string
+  is_active: boolean
+}
+
+export interface AppSettings {
+  payment_ai_enabled: boolean
+  payment_ai_model: 'claude-haiku-4-5' | 'claude-sonnet-5' | 'claude-opus-4-8'
+}
+
+export type OrderStatus =
+  | 'awaiting_payment' | 'verifying' | 'paid' | 'needs_review' | 'cancelled'
+
+export interface AiVerdict {
+  verdict: 'pass' | 'fail' | 'unsure'
+  extracted: {
+    amount: number | null
+    recipient: string | null
+    reference: string | null
+    timestamp: string | null
+  }
+  reason: string
+}
+
+export interface Order {
+  id: string
+  user_id: string
+  total: number
+  status: OrderStatus
+  payment_method_id: string | null
+  receipt_image_url: string | null
+  ai_verdict: AiVerdict | null
+  created_at: string
+}
+
+export interface OrderItem {
+  order_id: string
+  item_id: string
+  qty: number
+  price_at_purchase: number
+}
+
+export interface RestockDetection {
+  matched_item_id: string | null
+  name: string
+  qty: number
+  suggested_price: number | null
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export interface RestockSession {
+  id: string
+  admin_id: string
+  photo_url: string
+  ai_result: { detections: RestockDetection[] } | null
+  status: 'pending_review' | 'applied' | 'discarded'
+  created_at: string
+}
+
+export interface CartLine {
+  item: Item
+  qty: number
+}
+
+===== src/pages/admin/Settings.tsx =====
+import { useEffect, useState } from 'react'
+import { Sparkles } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import type { AppSettings } from '../../types'
+import PaymentMethods from './Payments'
+
+const MODELS: { value: AppSettings['payment_ai_model']; label: string; hint: string }[] = [
+  { value: 'claude-haiku-4-5', label: 'Haiku', hint: 'cheapest (~₱0.15/check)' },
+  { value: 'claude-sonnet-5', label: 'Sonnet', hint: 'balanced (~₱0.7/check)' },
+  { value: 'claude-opus-4-8', label: 'Opus', hint: 'most accurate (~₱1.2/check)' },
+]
+
+export default function Settings() {
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('app_settings').select('*').single()
+      .then(({ data, error: err }) => {
+        if (err) {
+          setError(err.message)
+          return
+        }
+        setSettings(data as AppSettings)
+      })
+  }, [])
+
+  const save = async () => {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    setError(null)
+    try {
+      const { error: err } = await supabase.from('app_settings').update({
+        payment_ai_enabled: settings.payment_ai_enabled,
+        payment_ai_model: settings.payment_ai_model,
+        updated_at: new Date().toISOString(),
+      }).eq('id', true)
+      if (err) throw err
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-6 max-w-3xl">
+      <h1 className="font-display text-2xl font-bold">Settings</h1>
+
+      <section className="rounded-2xl bg-surface-raised shadow-sm p-4 md:p-5 space-y-4">
+        <h2 className="font-display text-lg font-bold flex items-center gap-1.5">
+          <Sparkles className="size-5 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
+          AI payment verification
+        </h2>
+
+        {!settings ? (
+          <p className="text-sm text-ink-500">Loading…</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium text-sm">Verify payments with AI</p>
+                {!settings.payment_ai_enabled && (
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    Payments will skip AI and go straight to the review queue for manual approval.
+                  </p>
+                )}
+              </div>
+              <button
+                role="switch"
+                aria-checked={settings.payment_ai_enabled}
+                aria-label="Verify payments with AI"
+                onClick={() => setSettings({ ...settings, payment_ai_enabled: !settings.payment_ai_enabled })}
+                className={`shrink-0 w-12 h-7 rounded-full transition relative ${settings.payment_ai_enabled ? 'bg-brand-600' : 'bg-ink-900/15'}`}
+              >
+                <span
+                  className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition ${settings.payment_ai_enabled ? 'left-[calc(100%-1.625rem)]' : 'left-0.5'}`}
+                />
+              </button>
+            </div>
+
+            <div className={`space-y-2 ${settings.payment_ai_enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+              <p className="text-xs font-medium text-ink-500">Model</p>
+              <div className="grid grid-cols-3 gap-2">
+                {MODELS.map((m) => (
+                  <button
+                    key={m.value}
+                    disabled={!settings.payment_ai_enabled}
+                    onClick={() => setSettings({ ...settings, payment_ai_model: m.value })}
+                    className={`rounded-md py-2.5 px-2 text-center text-sm font-medium space-y-0.5 ${
+                      settings.payment_ai_model === m.value ? 'bg-ink-900 text-white' : 'bg-ink-900/5'
+                    }`}
+                  >
+                    <span className="block">{m.label}</span>
+                    <span className={`block text-[10px] font-normal ${settings.payment_ai_model === m.value ? 'text-white/70' : 'text-ink-500'}`}>
+                      {m.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={save}
+                disabled={saving}
+                className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              {saved && <span className="text-sm text-green-600 font-medium">Saved</span>}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="rounded-2xl bg-surface-raised shadow-sm p-4 md:p-5">
+        <PaymentMethods />
+      </section>
+    </div>
+  )
+}
+
+===== src/pages/admin/Payments.tsx =====
+import { useEffect, useState } from 'react'
+import { Banknote, CreditCard, Landmark, Smartphone } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { compressImage } from '../../lib/image'
+import type { PaymentMethod } from '../../types'
+
+type Draft = {
+  id?: string
+  label: string
+  type: 'ewallet' | 'bank' | 'cash'
+  account_name: string
+  account_number: string
+  file?: File | null
+  existing_qr?: string | null
+}
+
+const EMPTY: Draft = { label: '', type: 'ewallet', account_name: '', account_number: '', file: null }
+
+export default function PaymentMethods() {
+  const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () =>
+    supabase.from('payment_methods').select('*').order('created_at')
+      .then(({ data }) => setMethods((data as PaymentMethod[]) ?? []))
+
+  useEffect(() => { load() }, [])
+
+  const save = async () => {
+    if (!draft) return
+    setSaving(true)
+    setError(null)
+    try {
+      // Validate before uploading
+      const label = draft.label.trim()
+      const account_name = draft.account_name.trim()
+      if (!label) throw new Error('Label is required')
+      if (!account_name) throw new Error('Account name is required')
+      if (draft.type !== 'cash' && !draft.id && !draft.file) throw new Error('A QR code image is required')
+
+      let qr_image_url: string | null = draft.type === 'cash' ? null : (draft.existing_qr ?? null)
+      if (draft.type !== 'cash' && draft.file) {
+        const blob = await compressImage(draft.file, 1000, 0.9)
+        const path = `${crypto.randomUUID()}.jpg`
+        const { error: upErr } = await supabase.storage
+          .from('qr-codes').upload(path, blob, { contentType: 'image/jpeg' })
+        if (upErr) throw upErr
+        qr_image_url = supabase.storage.from('qr-codes').getPublicUrl(path).data.publicUrl
+      }
+      const payload = {
+        label,
+        type: draft.type,
+        account_name,
+        account_number: draft.account_number.trim(),
+        qr_image_url,
+      }
+      const q = draft.id
+        ? supabase.from('payment_methods').update(payload).eq('id', draft.id)
+        : supabase.from('payment_methods').insert(payload)
+      const { error: dbErr } = await q
+      if (dbErr) throw dbErr
+      setDraft(null)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggle = async (m: PaymentMethod) => {
+    setError(null)
+    const { error: upErr } = await supabase.from('payment_methods').update({ is_active: !m.is_active }).eq('id', m.id)
+    if (upErr) {
+      setError(`Toggle failed: ${upErr.message}`)
+      return
+    }
+    await load()
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold">Payment methods</h2>
+        <button onClick={() => setDraft({ ...EMPTY })} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium">
+          + Add
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+      {methods.length === 0 ? (
+        <div className="text-center py-12 space-y-2">
+          <CreditCard className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+          <p className="text-ink-700 font-medium">No payment methods yet</p>
+          <p className="text-ink-500 text-sm">Add one so customers can pay for orders.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {methods.map((m) => (
+            <div key={m.id} className={`rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3 ${m.is_active ? '' : 'opacity-50'}`}>
+              {m.qr_image_url ? (
+                <img src={m.qr_image_url} alt="" className="size-12 rounded-md object-cover" />
+              ) : (
+                <div className="size-12 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
+                  <Banknote className="size-6 text-brand-600/60" strokeWidth={2.5} aria-hidden="true" />
+                </div>
+              )}
+              <div className="grow">
+                <p className="font-medium text-sm flex items-center gap-1.5">
+                  {m.type === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.type === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.type === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.label}
+                </p>
+                <p className="text-xs text-ink-500">{m.account_name} {m.account_number && `· ${m.account_number}`}</p>
+              </div>
+              <button onClick={() => toggle(m)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">
+                {m.is_active ? 'Disable' : 'Enable'}
+              </button>
+              <button
+                onClick={() => setDraft({
+                  id: m.id, label: m.label, type: m.type, account_name: m.account_name,
+                  account_number: m.account_number, file: null, existing_qr: m.qr_image_url,
+                })}
+                className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+              >
+                Edit
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draft && (
+        <div className="fixed inset-0 z-20 bg-ink-900/40 flex items-end md:items-center justify-center" onClick={() => setDraft(null)}>
+          <div className="bg-surface-raised rounded-t-xl md:rounded-xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display font-bold text-lg">{draft.id ? 'Edit method' : 'New payment method'}</h2>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">Label (e.g. GCash, BPI)</span>
+              <input className={inputCls} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+            </label>
+            <div className="flex gap-2">
+              {(['ewallet', 'bank', 'cash'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setDraft({ ...draft, type: t })}
+                  className={`grow rounded-md py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 ${draft.type === t ? 'bg-ink-900 text-white' : 'bg-ink-900/5'}`}
+                >
+                  {t === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {t === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {t === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {t === 'ewallet' ? 'E-wallet' : t === 'bank' ? 'Bank' : 'Cash'}
+                </button>
+              ))}
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink-500">
+                {draft.type === 'cash' ? 'Label / where to pay' : 'Account name'}
+              </span>
+              <input className={inputCls} value={draft.account_name} onChange={(e) => setDraft({ ...draft, account_name: e.target.value })} />
+            </label>
+            {draft.type !== 'cash' && (
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-ink-500">Account / mobile number</span>
+                <input className={inputCls} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} />
+              </label>
+            )}
+            {draft.type === 'cash' ? (
+              <p className="text-xs text-ink-500">No QR needed for cash.</p>
+            ) : (
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-ink-500">QR code image</span>
+                <input type="file" accept="image/*" className="text-sm" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} />
+              </label>
+            )}
+            {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setDraft(null)} className="grow rounded-md bg-ink-900/5 py-3 font-medium">Cancel</button>
+              <button onClick={save} disabled={saving} className="grow rounded-md bg-ink-900 text-white py-3 font-medium disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500'
+
+===== src/pages/Pay.tsx =====
+import { useEffect, useState, useRef } from 'react'
+import { Link, useParams, useNavigate } from 'react-router'
+import { Banknote, CircleCheck, Clock, ScanSearch } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { formatPeso } from '../lib/money'
+import { compressImage } from '../lib/image'
+import type { Order, PaymentMethod } from '../types'
+
+export default function Pay() {
+  const { orderId } = useParams()
+  const navigate = useNavigate()
+  const [order, setOrder] = useState<Order | null>(null)
+  const [method, setMethod] = useState<PaymentMethod | null>(null)
+  const [countdown, setCountdown] = useState(10)
+
+  useEffect(() => {
+    if (!orderId) return
+    supabase.from('orders').select('*').eq('id', orderId).single()
+      .then(async ({ data }) => {
+        const o = data as Order | null
+        setOrder(o)
+        if (o?.payment_method_id) {
+          const { data: pm } = await supabase
+            .from('payment_methods').select('*').eq('id', o.payment_method_id).single()
+          setMethod(pm as PaymentMethod)
+        }
+      })
+  }, [orderId])
+
+  useEffect(() => {
+    if (order?.status !== 'paid') return
+    if (countdown <= 0) {
+      navigate('/')
+      return
+    }
+    const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [order?.status, countdown, navigate])
+
+  if (!order) return <div className="min-h-dvh flex items-center justify-center text-ink-500">Loading…</div>
+
+  return (
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5">
+      <header className="flex items-center gap-3">
+        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <h1 className="font-display text-xl font-bold">Scan & pay</h1>
+      </header>
+
+      <div className="rounded-lg bg-surface-raised p-6 shadow-card text-center space-y-4">
+        <p className="text-ink-500 text-sm">Amount due</p>
+        <p className="text-4xl font-black text-brand-600 tabular-nums">{formatPeso(order.total)}</p>
+        {method && method.type === 'cash' && (
+          <>
+            <Banknote className="size-16 mx-auto text-brand-600" strokeWidth={2} aria-hidden="true" />
+            <div>
+              <p className="font-semibold">{method.label}</p>
+              <p className="text-sm text-ink-500">
+                Pay {formatPeso(order.total)} in cash — hand it to {method.account_name} or drop it in the box,
+                then upload a photo of the cash you're paying.
+              </p>
+            </div>
+          </>
+        )}
+        {method && method.type !== 'cash' && (
+          <>
+            <img src={method.qr_image_url ?? undefined} alt={`${method.label} QR code`} className="mx-auto w-64 rounded-md" />
+            <div>
+              <p className="font-semibold">{method.label}</p>
+              <p className="text-sm text-ink-500">{method.account_name}</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <PaymentStatus order={order} onUpdated={setOrder} />
+
+      {['paid', 'needs_review', 'cancelled'].includes(order.status) && (
+        <Link
+          to="/"
+          className="block w-full text-center rounded-2xl bg-ink-900 text-white py-4 font-bold active:scale-[0.98] transition"
+        >
+          Back to store
+        </Link>
+      )}
+
+      {order.status === 'paid' && (
+        <p className="text-center text-sm text-ink-500">Returning to store in {countdown}…</p>
+      )}
+    </div>
+  )
+}
+
+type Phase = 'idle' | 'uploading' | 'verifying' | 'done'
+
+async function edgeErrorMessage(err: unknown, fallback: string): Promise<string> {
+  const ctx = (err as { context?: Response } | null)?.context
+  if (ctx && typeof ctx.json === 'function') {
+    try {
+      const body = await ctx.clone().json()
+      if (body?.error) return String(body.error)
+    } catch { /* not JSON */ }
+  }
+  return err instanceof Error ? err.message : fallback
+}
+
+function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (o: Order) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  const handleFile = async (file: File) => {
+    setError(null)
+    setPhase('uploading')
+    try {
+      const blob = await compressImage(file)
+      if (blob.size > 5 * 1024 * 1024) throw new Error('Image too large even after compression')
+      const path = `${order.user_id}/${order.id}.jpg`
+      const { error: upErr } = await supabase.storage
+        .from('receipts')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+      if (upErr) throw upErr
+
+      setPhase('verifying')
+      const { data, error: fnErr } = await supabase.functions.invoke('verify-payment', {
+        body: { order_id: order.id, receipt_path: path },
+      })
+      if (fnErr) throw new Error(await edgeErrorMessage(fnErr, 'Verification failed'))
+
+      const { data: fresh } = await supabase.from('orders').select('*').eq('id', order.id).single()
+      if (fresh) onUpdated(fresh as Order)
+      setPhase('done')
+      void data
+    } catch (e) {
+      setPhase('idle')
+      setError(e instanceof Error ? e.message : 'Something went wrong — try again.')
+    }
+  }
+
+  if (order.status === 'paid') {
+    return (
+      <div className="rounded-lg bg-green-50 text-green-800 p-5 text-center space-y-1">
+        <CircleCheck className="size-8 mx-auto" strokeWidth={2.5} aria-hidden="true" />
+        <p className="font-bold">Payment verified — enjoy!</p>
+      </div>
+    )
+  }
+  if (order.status === 'needs_review') {
+    return (
+      <div className="rounded-lg bg-amber-50 text-amber-800 p-5 text-center space-y-1">
+        <Clock className="size-8 mx-auto" strokeWidth={2.5} aria-hidden="true" />
+        <p className="font-bold">Sent to admin for review</p>
+        {order.ai_verdict?.reason && <p className="text-sm">{order.ai_verdict.reason}</p>}
+      </div>
+    )
+  }
+  if (order.status === 'cancelled') {
+    return <p className="text-center text-ink-500">This order was cancelled.</p>
+  }
+  if (order.status === 'verifying') {
+    return (
+      <div className="rounded-lg bg-blue-50 text-blue-800 p-5 text-center space-y-1">
+        <ScanSearch className="size-8 mx-auto" strokeWidth={2.5} aria-hidden="true" />
+        <p className="font-bold">Verifying your payment…</p>
+        <p className="text-sm">This usually takes a few seconds. Check My Orders for the result.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+      />
+      <button
+        disabled={phase !== 'idle'}
+        onClick={() => fileRef.current?.click()}
+        className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
+      >
+        {phase === 'idle' && "I've paid — upload screenshot"}
+        {phase === 'uploading' && 'Uploading…'}
+        {phase === 'verifying' && 'Verifying with AI…'}
+        {phase === 'done' && 'Done'}
+      </button>
+      {error && <p className="text-sm text-red-600 text-center" role="alert">{error}</p>}
+    </div>
+  )
+}
+
+===== src/pages/admin/Items.tsx =====
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
+import { Camera, CupSoda, ShoppingBasket, X } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { formatPeso } from '../../lib/money'
+import { compressImage } from '../../lib/image'
+import type { Item } from '../../types'
+
+type Draft = {
+  id?: string
+  name: string
+  price: string
+  stock: string
+  category: string
+  low_stock_threshold: string
+  file?: File | null
+}
+
+const EMPTY: Draft = { name: '', price: '', stock: '0', category: 'snacks', low_stock_threshold: '3', file: null }
+
+export default function Items() {
+  const navigate = useNavigate()
+  const [items, setItems] = useState<Item[]>([])
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () =>
+    supabase.from('items').select('*').eq('is_active', true).order('name')
+      .then(({ data }) => setItems((data as Item[]) ?? []))
+
+  useEffect(() => { load() }, [])
+
+  const adjustStock = async (item: Item, delta: number) => {
+    setError(null)
+    const next = Math.max(0, item.stock + delta)
+    setItems((all) => all.map((i) => (i.id === item.id ? { ...i, stock: next } : i)))
+    const { error: upErr } = await supabase.from('items').update({ stock: next }).eq('id', item.id)
+    if (upErr) {
+      setError(`Stock update failed: ${upErr.message}`)
+      await load()
+    }
+  }
+
+  const save = async () => {
+    if (!draft) return
+    setSaving(true)
+    setError(null)
+    try {
+      // Validate before uploading
+      const name = draft.name.trim()
+      const price = Number(draft.price)
+      const stock = Math.trunc(Number(draft.stock))
+      const low = Math.trunc(Number(draft.low_stock_threshold))
+      if (!name) throw new Error('Name is required')
+      if (!Number.isFinite(price) || price < 0) throw new Error('Price must be a number ≥ 0')
+      if (!Number.isFinite(stock) || stock < 0) throw new Error('Stock must be a whole number ≥ 0')
+      if (!Number.isFinite(low) || low < 0) throw new Error('Low stock alert must be a whole number ≥ 0')
+
+      let image_url: string | undefined
+      if (draft.file) {
+        const blob = await compressImage(draft.file, 800)
+        const path = `${crypto.randomUUID()}.jpg`
+        const { error: upErr } = await supabase.storage
+          .from('item-images').upload(path, blob, { contentType: 'image/jpeg' })
+        if (upErr) throw upErr
+        image_url = supabase.storage.from('item-images').getPublicUrl(path).data.publicUrl
+      }
+      const payload = {
+        name,
+        price,
+        stock,
+        category: draft.category.trim() || 'snacks',
+        low_stock_threshold: low,
+        ...(image_url ? { image_url } : {}),
+      }
+      const q = draft.id
+        ? supabase.from('items').update(payload).eq('id', draft.id)
+        : supabase.from('items').insert(payload)
+      const { error: dbErr } = await q
+      if (dbErr) throw dbErr
+      setDraft(null)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deactivate = async (item: Item) => {
+    if (!confirm(`Remove "${item.name}" from the store?`)) return
+    setError(null)
+    const { error: delErr } = await supabase.from('items').update({ is_active: false }).eq('id', item.id)
+    if (delErr) {
+      setError(`Remove failed: ${delErr.message}`)
+      return
+    }
+    await load()
+  }
+
+  return (
+    <div className="p-4 md:p-8 space-y-4 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-bold">Items</h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDraft({ ...EMPTY })}
+            className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium"
+          >
+            + Add item
+          </button>
+          <button
+            onClick={() => navigate('/admin/restock')}
+            aria-label="AI restock"
+            className="rounded-md bg-brand-600 text-white p-2.5"
+          >
+            <Camera className="size-5" strokeWidth={2.5} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+      {items.length === 0 ? (
+        <div className="text-center py-12 space-y-2">
+          <CupSoda className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+          <p className="text-ink-700 font-medium">No items yet</p>
+          <p className="text-ink-500 text-sm">Add your first snack to stock the shelf.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((i) => (
+            <div key={i.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
+              <div className="size-12 rounded-md bg-brand-50 overflow-hidden flex items-center justify-center shrink-0">
+                {i.image_url ? <img src={i.image_url} alt="" className="w-full h-full object-cover" /> : <ShoppingBasket className="size-6 text-brand-600/40" strokeWidth={2.5} aria-hidden="true" />}
+              </div>
+              <div className="grow min-w-0">
+                <p className="font-medium text-sm truncate">{i.name}</p>
+                <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
+                <span className={`w-8 text-center font-bold text-sm tabular-nums ${i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
+                  {i.stock}
+                </span>
+                <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
+              </div>
+              <button
+                onClick={() => setDraft({
+                  id: i.id, name: i.name, price: String(i.price), stock: String(i.stock),
+                  category: i.category, low_stock_threshold: String(i.low_stock_threshold), file: null,
+                })}
+                className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+              >
+                Edit
+              </button>
+              <button onClick={() => deactivate(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><X className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draft && (
+        <div className="fixed inset-0 z-20 bg-ink-900/40 flex items-end md:items-center justify-center" onClick={() => setDraft(null)}>
+          <div className="bg-surface-raised rounded-t-xl md:rounded-xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display font-bold text-lg">{draft.id ? 'Edit item' : 'New item'}</h2>
+            <Field label="Name"><input className={inputCls} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Price (₱)"><input className={inputCls} inputMode="decimal" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} /></Field>
+              <Field label="Stock"><input className={inputCls} inputMode="numeric" value={draft.stock} onChange={(e) => setDraft({ ...draft, stock: e.target.value })} /></Field>
+              <Field label="Category"><input className={inputCls} value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} /></Field>
+              <Field label="Low stock alert"><input className={inputCls} inputMode="numeric" value={draft.low_stock_threshold} onChange={(e) => setDraft({ ...draft, low_stock_threshold: e.target.value })} /></Field>
+            </div>
+            <Field label="Photo">
+              <input type="file" accept="image/*" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} className="text-sm" />
+            </Field>
+            {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setDraft(null)} className="grow rounded-md bg-ink-900/5 py-3 font-medium">Cancel</button>
+              <button onClick={save} disabled={saving} className="grow rounded-md bg-ink-900 text-white py-3 font-medium disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500'
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-ink-500">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+===== src/pages/admin/AdminLayout.tsx =====
+import { NavLink, Outlet, Link } from 'react-router'
+import { ArrowLeft, CupSoda, LayoutDashboard, Popcorn, ReceiptText, Settings, Store } from 'lucide-react'
+
+const NAV = [
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/admin/items', label: 'Items', icon: CupSoda, end: false },
+  { to: '/admin/orders', label: 'Orders', icon: ReceiptText, end: false },
+  { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
+]
+
+export default function AdminLayout() {
+  return (
+    <div className="min-h-dvh md:flex bg-surface">
+      <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-line bg-surface-raised p-4 gap-1">
+        <Link to="/" className="font-display font-extrabold text-lg mb-4 rounded-md flex items-center gap-1.5">
+          <Popcorn className="size-6 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
+          SnackLabs
+        </Link>
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              `rounded-md px-3 py-2.5 text-sm font-medium transition flex items-center gap-2 ${
+                isActive ? 'bg-ink-900 text-white' : 'text-ink-500 hover:bg-ink-900/5'
+              }`
+            }
+          >
+            <n.icon className="size-6" strokeWidth={2.5} aria-hidden="true" />
+            {n.label}
+          </NavLink>
+        ))}
+        <Link
+          to="/"
+          className="mt-auto rounded-md px-3 py-2.5 text-sm font-medium transition flex items-center gap-2 text-ink-500 hover:bg-ink-900/5"
+        >
+          <ArrowLeft className="size-6" strokeWidth={2.5} aria-hidden="true" />
+          Back to store
+        </Link>
+      </aside>
+
+      <main className="grow pb-24 md:pb-8">
+        <Outlet />
+      </main>
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface-raised border-t border-line flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <Link
+          to="/"
+          className="flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 text-ink-500"
+        >
+          <Store className="size-6" strokeWidth={2.5} aria-hidden="true" />
+          Store
+        </Link>
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 ${
+                isActive ? 'text-brand-600 font-bold' : 'text-ink-500'
+              }`
+            }
+          >
+            <n.icon className="size-6" strokeWidth={2.5} aria-hidden="true" />
+            {n.label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  )
+}
+
+===== src/App.tsx =====
+import { Routes, Route, Navigate } from 'react-router'
+import Login from './pages/Login'
+import Store from './pages/Store'
+import Cart from './pages/Cart'
+import Pay from './pages/Pay'
+import Orders from './pages/Orders'
+import AdminLayout from './pages/admin/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+import Items from './pages/admin/Items'
+import Settings from './pages/admin/Settings'
+import AdminOrders from './pages/admin/AdminOrders'
+import Restock from './pages/admin/Restock'
+import { RequireAuth, RequireAdmin } from './components/guards'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<RequireAuth><Store /></RequireAuth>} />
+      <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
+      <Route path="/pay/:orderId" element={<RequireAuth><Pay /></RequireAuth>} />
+      <Route path="/orders" element={<RequireAuth><Orders /></RequireAuth>} />
+      <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+        <Route index element={<Dashboard />} />
+        <Route path="items" element={<Items />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="payments" element={<Navigate to="/admin/settings" replace />} />
+        <Route path="orders" element={<AdminOrders />} />
+        <Route path="restock" element={<Restock />} />
+      </Route>
+    </Routes>
+  )
+}
+
+===== MIGRATIONS =====
+alter table public.payment_methods drop constraint if exists payment_methods_type_check;
+alter table public.payment_methods add constraint payment_methods_type_check check (type in ('ewallet','bank','cash'));
+alter table public.payment_methods alter column qr_image_url drop not null;
+create table public.app_settings (
+  id boolean primary key default true,
+  payment_ai_enabled boolean not null default true,
+  payment_ai_model text not null default 'claude-opus-4-8'
+    check (payment_ai_model in ('claude-haiku-4-5','claude-sonnet-5','claude-opus-4-8')),
+  updated_at timestamptz not null default now(),
+  constraint app_settings_singleton check (id = true)
+);
+insert into public.app_settings (id) values (true) on conflict do nothing;
+alter table public.app_settings enable row level security;
+create policy "app_settings admin read" on public.app_settings for select to authenticated using (public.is_admin());
+create policy "app_settings admin write" on public.app_settings for update to authenticated using (public.is_admin()) with check (public.is_admin());

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router'
-import { CircleCheck, Clock, ScanSearch } from 'lucide-react'
+import { Banknote, CircleCheck, Clock, ScanSearch } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPeso } from '../lib/money'
 import { compressImage } from '../lib/image'
@@ -49,9 +49,21 @@ export default function Pay() {
       <div className="rounded-lg bg-surface-raised p-6 shadow-card text-center space-y-4">
         <p className="text-ink-500 text-sm">Amount due</p>
         <p className="text-4xl font-black text-brand-600 tabular-nums">{formatPeso(order.total)}</p>
-        {method && (
+        {method && method.type === 'cash' && (
           <>
-            <img src={method.qr_image_url} alt={`${method.label} QR code`} className="mx-auto w-64 rounded-md" />
+            <Banknote className="size-16 mx-auto text-brand-600" strokeWidth={2} aria-hidden="true" />
+            <div>
+              <p className="font-semibold">{method.label}</p>
+              <p className="text-sm text-ink-500">
+                Pay {formatPeso(order.total)} in cash — hand it to {method.account_name} or drop it in the box,
+                then upload a photo of the cash you're paying.
+              </p>
+            </div>
+          </>
+        )}
+        {method && method.type !== 'cash' && (
+          <>
+            <img src={method.qr_image_url ?? undefined} alt={`${method.label} QR code`} className="mx-auto w-64 rounded-md" />
             <div>
               <p className="font-semibold">{method.label}</p>
               <p className="text-sm text-ink-500">{method.account_name}</p>
