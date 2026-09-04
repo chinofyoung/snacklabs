@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { formatPeso } from '../lib/money'
 import { PERIODS, periodStart, periodLabel, type Period } from '../lib/period'
 import type { Order, OrderStatus } from '../types'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 const STATUS_STYLE: Record<OrderStatus, string> = {
   awaiting_payment: 'bg-ink-900/5 text-ink-500',
@@ -25,6 +26,9 @@ export default function Orders() {
   const [period, setPeriod] = useState<Period>('all')
   const [summaryCount, setSummaryCount] = useState(0)
   const [summaryTotal, setSummaryTotal] = useState(0)
+  const [pendingCancel, setPendingCancel] = useState<Order | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   // RLS already scopes `orders` reads to the signed-in user (see "orders read own or
   // admin" policy in supabase/migrations/20260702030220_init.sql), so no extra
@@ -57,6 +61,22 @@ export default function Orders() {
     setLoading(true)
     Promise.all([loadPage(0), loadSummary()]).then(() => setLoading(false))
   }, [loadPage, loadSummary])
+
+  const cancelOrder = async (order: Order) => {
+    setCancelling(true)
+    setCancelError(null)
+    const { error } = await supabase.rpc('cancel_own_order', { p_order_id: order.id })
+    setCancelling(false)
+    if (error) {
+      setCancelError(error.message)
+      return
+    }
+    setPendingCancel(null)
+    // The cancelled order affects the period summary too, so reload both
+    // from page 0 rather than hand-patching the local `orders` array.
+    setPage(0)
+    await Promise.all([loadPage(0), loadSummary()])
+  }
 
   return (
     <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-4 app-frame">
@@ -102,22 +122,31 @@ export default function Orders() {
             </div>
           ) : (
             orders.map((o) => (
-              <Link
-                key={o.id}
-                to={`/pay/${o.id}`}
-                className="block rounded-lg bg-surface-raised p-4 shadow-card space-y-1"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold tabular-nums">{formatPeso(o.total)}</span>
-                  <span className={`text-xs rounded-full px-2.5 py-1 capitalize font-medium ${STATUS_STYLE[o.status]}`}>
-                    {o.status.replace('_', ' ')}
-                  </span>
-                </div>
-                <p className="text-xs text-ink-500">{new Date(o.created_at).toLocaleString()}</p>
-                {o.status === 'needs_review' && o.ai_verdict?.reason && (
-                  <p className="text-xs text-amber-700">{o.ai_verdict.reason}</p>
+              <div key={o.id} className="rounded-lg bg-surface-raised p-4 shadow-card">
+                <Link to={`/pay/${o.id}`} className="block space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold tabular-nums">{formatPeso(o.total)}</span>
+                    <span className={`text-xs rounded-full px-2.5 py-1 capitalize font-medium ${STATUS_STYLE[o.status]}`}>
+                      {o.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-ink-500">{new Date(o.created_at).toLocaleString()}</p>
+                  {o.status === 'needs_review' && o.ai_verdict?.reason && (
+                    <p className="text-xs text-amber-700">{o.ai_verdict.reason}</p>
+                  )}
+                </Link>
+                {o.status === 'awaiting_payment' && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => setPendingCancel(o)}
+                      aria-label={`Cancel ${formatPeso(o.total)} order from ${new Date(o.created_at).toLocaleString()}`}
+                      className="text-sm text-ink-500 hover:text-red-600 rounded-md transition"
+                    >
+                      Cancel order
+                    </button>
+                  </div>
                 )}
-              </Link>
+              </div>
             ))
           )}
         </>
@@ -131,6 +160,25 @@ export default function Orders() {
           {loadingMore ? 'Loading…' : 'Load more'}
         </button>
       )}
+      <ConfirmDialog
+        open={pendingCancel !== null}
+        destructive
+        title="Cancel this order?"
+        message={pendingCancel && (
+          <>
+            Cancel your <b>{formatPeso(pendingCancel.total)}</b> order? This cannot be undone.
+            {cancelError && (
+              <p role="alert" className="text-sm text-red-600 mt-2">{cancelError}</p>
+            )}
+          </>
+        )}
+        confirmLabel="Cancel order"
+        cancelLabel="Keep order"
+        busy={cancelling}
+        busyLabel="Cancelling…"
+        onConfirm={() => pendingCancel && cancelOrder(pendingCancel)}
+        onCancel={() => { setPendingCancel(null); setCancelError(null) }}
+      />
     </div>
   )
 }
