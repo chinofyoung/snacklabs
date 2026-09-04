@@ -52,11 +52,11 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-30 bg-ink-900/40 flex items-end md:items-center justify-center"
+      className="fixed inset-0 z-30 bg-ink-900/40 flex items-end md:items-center justify-center p-4"
       onClick={() => { if (!busy) onCancel() }}
     >
       <div
-        className="bg-surface-raised rounded-t-xl md:rounded-xl w-full max-w-md p-5 space-y-3"
+        className="bg-surface-raised rounded-xl w-full max-w-md p-5 space-y-3"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
