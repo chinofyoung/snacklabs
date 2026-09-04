@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ReceiptText } from 'lucide-react'
+import { Ban, ReceiptText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPeso } from '../lib/money'
 import { PERIODS, periodStart, periodLabel, type Period } from '../lib/period'
@@ -140,8 +140,9 @@ export default function Orders() {
                     <button
                       onClick={() => setPendingCancel(o)}
                       aria-label={`Cancel ${formatPeso(o.total)} order from ${new Date(o.created_at).toLocaleString()}`}
-                      className="text-sm text-ink-500 hover:text-red-600 rounded-md transition"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-ink-900/5 text-ink-700 px-3 py-1.5 text-sm font-medium hover:bg-red-50 hover:text-red-600 active:scale-95 transition"
                     >
+                      <Ban className="size-4" strokeWidth={2.5} aria-hidden="true" />
                       Cancel order
                     </button>
                   </div>
