@@ -29,6 +29,9 @@ export default function AdminOrders() {
   const [showDeleteAll, setShowDeleteAll] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [pendingReject, setPendingReject] = useState<OrderRow | null>(null)
+  const [pendingVoid, setPendingVoid] = useState<OrderRow | null>(null)
+  const [voiding, setVoiding] = useState(false)
+  const [voidError, setVoidError] = useState<string | null>(null)
   const [summaryCount, setSummaryCount] = useState(0)
   const [summaryTotal, setSummaryTotal] = useState(0)
 
@@ -99,6 +102,25 @@ export default function AdminOrders() {
     setPage(0)
     await loadPage(0)
     await loadSummary()
+  }
+
+  const voidOrder = async (o: OrderRow) => {
+    setVoiding(true)
+    setVoidError(null)
+    try {
+      const { error } = await supabase.rpc('void_order', { p_order_id: o.id })
+      if (error) {
+        setVoidError(error.message)
+        return false
+      }
+      setOpen(null)
+      setPage(0)
+      await loadPage(0)
+      await loadSummary()
+      return true
+    } finally {
+      setVoiding(false)
+    }
   }
 
   const deleteAll = async () => {
@@ -216,6 +238,13 @@ export default function AdminOrders() {
                     </button>
                   </div>
                 )}
+                <button
+                  onClick={() => setPendingVoid(o)}
+                  disabled={busy || voiding}
+                  className="w-full rounded-md bg-red-600 text-white py-3 font-medium disabled:opacity-50"
+                >
+                  Void & delete
+                </button>
               </div>
             )}
           </div>
@@ -261,6 +290,32 @@ export default function AdminOrders() {
           if (ok) setShowDeleteAll(false)
         }}
         onCancel={() => setShowDeleteAll(false)}
+      />
+
+      <ConfirmDialog
+        open={pendingVoid !== null}
+        destructive
+        title="Void this order?"
+        message={
+          <>
+            {voidError && <p className="text-red-600 mb-2" role="alert">{voidError}</p>}
+            {pendingVoid?.status === 'paid' ? (
+              <>This order is paid. Voiding it will return its line items to stock and remove <b>{pendingVoid ? formatPeso(pendingVoid.total) : ''}</b> from revenue for <b>{pendingVoid?.profiles?.full_name || pendingVoid?.profiles?.email || 'this customer'}</b>. This cannot be undone.</>
+            ) : (
+              <>This will permanently delete the order from <b>{pendingVoid?.profiles?.full_name || pendingVoid?.profiles?.email || 'this customer'}</b> ({pendingVoid ? formatPeso(pendingVoid.total) : ''}). No stock changes will be made since it was never paid. This cannot be undone.</>
+            )}
+          </>
+        }
+        confirmLabel="Void & delete"
+        busy={voiding}
+        busyLabel="Voiding…"
+        onConfirm={async () => {
+          if (pendingVoid) {
+            const ok = await voidOrder(pendingVoid)
+            if (ok) setPendingVoid(null)
+          }
+        }}
+        onCancel={() => { setPendingVoid(null); setVoidError(null) }}
       />
     </div>
   )
