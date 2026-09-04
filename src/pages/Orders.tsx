@@ -6,6 +6,7 @@ import { formatPeso } from '../lib/money'
 import { PERIODS, periodStart, periodLabel, type Period } from '../lib/period'
 import type { Order, OrderStatus } from '../types'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { useAuth } from '../context/AuthContext'
 
 const STATUS_STYLE: Record<OrderStatus, string> = {
   awaiting_payment: 'bg-ink-900/5 text-ink-500',
@@ -18,6 +19,8 @@ const STATUS_STYLE: Record<OrderStatus, string> = {
 const PAGE_SIZE = 10
 
 export default function Orders() {
+  const { session } = useAuth()
+  const userId = session?.user.id ?? null
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
@@ -30,11 +33,14 @@ export default function Orders() {
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
 
-  // RLS already scopes `orders` reads to the signed-in user (see "orders read own or
-  // admin" policy in supabase/migrations/20260702030220_init.sql), so no extra
-  // user_id filter is needed here.
+  // The "orders read own or admin" policy (supabase/migrations/20260702030220_init.sql)
+  // lets an admin's session read every row in the table, so this page must filter to
+  // the signed-in user explicitly rather than relying on RLS alone — otherwise an
+  // admin viewing "My orders" would see everyone's orders.
   const loadPage = useCallback(async (p: number) => {
+    if (!userId) return
     let q = supabase.from('orders').select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE - 1)
     if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
@@ -42,25 +48,29 @@ export default function Orders() {
     const rows = (data as Order[]) ?? []
     setOrders((prev) => (p === 0 ? rows : [...prev, ...rows]))
     setHasMore(rows.length === PAGE_SIZE)
-  }, [period])
+  }, [period, userId])
 
   const loadSummary = useCallback(async () => {
+    if (!userId) return
     // PostgREST has no SUM aggregate: the peso total is summed client-side from
     // up to 5000 matching rows. The order count uses Supabase's exact count,
     // which reflects the full filtered match regardless of the range cap.
-    let q = supabase.from('orders').select('total', { count: 'exact' }).range(0, 4999)
+    let q = supabase.from('orders').select('total', { count: 'exact' }).eq('user_id', userId).range(0, 4999)
     if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
     const { data, count } = await q
     const rows = (data as { total: number }[]) ?? []
     setSummaryCount(count ?? 0)
     setSummaryTotal(rows.reduce((sum, r) => sum + Number(r.total), 0))
-  }, [period])
+  }, [period, userId])
 
   useEffect(() => {
+    // Session hasn't resolved yet — stay in the loading state rather than firing an
+    // unscoped (or null-filtered) query, which would risk a flash of "No orders yet".
+    if (!userId) return
     setPage(0)
     setLoading(true)
     Promise.all([loadPage(0), loadSummary()]).then(() => setLoading(false))
-  }, [loadPage, loadSummary])
+  }, [loadPage, loadSummary, userId])
 
   const cancelOrder = async (order: Order) => {
     setCancelling(true)
