@@ -229,11 +229,11 @@ export default function AdminOrders() {
                   ? <img src={receiptUrl} alt="Receipt" className="rounded-md max-h-96 mx-auto" />
                   : o.receipt_image_url && <p className="text-xs text-ink-500">Loading receipt…</p>}
                 {['needs_review', 'verifying', 'awaiting_payment'].includes(o.status) && (
-                  <div className="flex gap-2">
-                    <button onClick={() => setPendingReject(o)} disabled={busy} className="grow rounded-md bg-red-50 text-red-600 py-3 font-medium disabled:opacity-50">
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setPendingReject(o)} disabled={busy} className="rounded-full bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition disabled:opacity-50">
                       Reject
                     </button>
-                    <button onClick={() => approve(o)} disabled={busy} className="grow rounded-md bg-green-600 text-white py-3 font-medium disabled:opacity-50">
+                    <button onClick={() => approve(o)} disabled={busy} className="rounded-full bg-green-600 px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50">
                       Approve & mark paid
                     </button>
                   </div>
@@ -241,7 +241,7 @@ export default function AdminOrders() {
                 <button
                   onClick={() => setPendingVoid(o)}
                   disabled={busy || voiding}
-                  className="w-full rounded-md bg-red-600 text-white py-3 font-medium disabled:opacity-50"
+                  className="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
                 >
                   Void & delete
                 </button>
