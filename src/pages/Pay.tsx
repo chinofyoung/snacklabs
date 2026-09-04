@@ -72,7 +72,7 @@ export default function Pay() {
         )}
       </div>
 
-      <PaymentStatus order={order} onUpdated={setOrder} />
+      <PaymentStatus order={order} method={method} onUpdated={setOrder} />
 
       {['paid', 'needs_review', 'cancelled'].includes(order.status) && (
         <Link
@@ -103,10 +103,11 @@ async function edgeErrorMessage(err: unknown, fallback: string): Promise<string>
   return err instanceof Error ? err.message : fallback
 }
 
-function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (o: Order) => void }) {
+function PaymentStatus({ order, method, onUpdated }: { order: Order; method: PaymentMethod | null; onUpdated: (o: Order) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
+  const isCash = method?.type === 'cash'
 
   const handleFile = async (file: File) => {
     setError(null)
@@ -180,7 +181,7 @@ function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (o: Orde
         onClick={() => fileRef.current?.click()}
         className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
       >
-        {phase === 'idle' && "I've paid — upload screenshot"}
+        {phase === 'idle' && (isCash ? "I've paid — upload photo proof" : "I've paid — upload screenshot")}
         {phase === 'uploading' && 'Uploading…'}
         {phase === 'verifying' && 'Verifying with AI…'}
         {phase === 'done' && 'Done'}
