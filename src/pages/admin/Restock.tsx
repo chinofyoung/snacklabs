@@ -1,11 +1,13 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Camera, CircleCheck, PackageOpen } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { compressImage } from '../../lib/image'
-import type { RestockDetection } from '../../types'
+import ConfirmDialog from '../../components/ConfirmDialog'
+import type { Item, RestockDetection } from '../../types'
 
 type Line = RestockDetection & { include: boolean; price: string }
 type Phase = 'idle' | 'analyzing' | 'review' | 'applying' | 'done'
+type CatalogItem = Pick<Item, 'id' | 'name' | 'stock' | 'price'>
 
 async function edgeErrorMessage(err: unknown, fallback: string): Promise<string> {
   const ctx = (err as { context?: Response } | null)?.context
@@ -18,6 +20,31 @@ async function edgeErrorMessage(err: unknown, fallback: string): Promise<string>
   return err instanceof Error ? err.message : fallback
 }
 
+// The AI's matched_item_id can hallucinate an id that doesn't exist in the
+// catalog. Resolving it at every read site (instead of trusting the raw
+// field) keeps a bad id from ever reaching apply_restock as a no-op update.
+function resolveMatch(matchedItemId: string | null, catalog: CatalogItem[], catalogLoaded: boolean) {
+  const matchedItem = matchedItemId ? catalog.find((c) => c.id === matchedItemId) ?? null : null
+  const aiMatchUnknown = catalogLoaded && matchedItemId != null && !matchedItem
+  return { matchedItem, aiMatchUnknown }
+}
+
+function pluralize(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`
+}
+
+// Kept local (not in src/lib) because this task is scoped to editing only
+// this file — a shared helper + vitest test would require a second file.
+function applySummary(lines: Line[], catalog: CatalogItem[], catalogLoaded: boolean): string {
+  const included = lines.filter((l) => l.include && l.qty > 0)
+  const restockCount = included.filter((l) => resolveMatch(l.matched_item_id, catalog, catalogLoaded).matchedItem).length
+  const newCount = included.length - restockCount
+  const parts: string[] = []
+  if (restockCount > 0) parts.push(`${pluralize(restockCount, 'item')} will be restocked`)
+  if (newCount > 0) parts.push(`${pluralize(newCount, 'new item')} will be created`)
+  return parts.length > 0 ? `${parts.join(' and ')}.` : 'No items will be applied.'
+}
+
 export default function Restock() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -25,6 +52,24 @@ export default function Restock() {
   const [lines, setLines] = useState<Line[]>([])
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [catalog, setCatalog] = useState<CatalogItem[]>([])
+  const [catalogLoaded, setCatalogLoaded] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('items').select('id, name, stock, price').eq('is_active', true).order('name')
+      .then(({ data, error: fetchErr }) => {
+        if (cancelled) return
+        if (fetchErr) {
+          setError(fetchErr.message)
+        } else {
+          setCatalog((data ?? []) as CatalogItem[])
+        }
+        setCatalogLoaded(true)
+      })
+    return () => { cancelled = true }
+  }, [])
 
   const analyze = async (file: File) => {
     setError(null)
@@ -55,13 +100,13 @@ export default function Restock() {
     }
   }
 
-  const apply = async () => {
+  const apply = async (): Promise<boolean> => {
     setPhase('applying')
     setError(null)
     const payload = lines
       .filter((l) => l.include && l.qty > 0)
       .map((l) => ({
-        item_id: l.matched_item_id,
+        item_id: resolveMatch(l.matched_item_id, catalog, catalogLoaded).matchedItem?.id ?? null,
         name: l.name,
         price: l.price ? Number(l.price) : 0,
         qty: l.qty,
@@ -74,13 +119,19 @@ export default function Restock() {
     if (rpcErr) {
       setPhase('review')
       setError(rpcErr.message)
-      return
+      return false
     }
     setPhase('done')
+    return true
+  }
+
+  const confirmApply = async () => {
+    const ok = await apply()
+    if (ok) setShowConfirm(false)
   }
 
   const reset = () => {
-    setPhase('idle'); setLines([]); setSessionId(null); setPreview(null); setError(null)
+    setPhase('idle'); setLines([]); setSessionId(null); setPreview(null); setError(null); setShowConfirm(false)
   }
 
   const edit = (i: number, patch: Partial<Line>) =>
@@ -122,7 +173,9 @@ export default function Restock() {
         <div className="space-y-3">
           {preview && <img src={preview} alt="" className="rounded-md max-h-48 mx-auto" />}
           {lines.length === 0 && <p className="text-center text-ink-500">Nothing detected. Try a clearer photo.</p>}
-          {lines.map((l, i) => (
+          {lines.map((l, i) => {
+            const { matchedItem, aiMatchUnknown } = resolveMatch(l.matched_item_id, catalog, catalogLoaded)
+            return (
             <div key={i} className={`rounded-lg bg-surface-raised p-3 shadow-card space-y-2 ${l.include ? '' : 'opacity-40'}`}>
               <div className="flex items-center gap-2">
                 <input type="checkbox" checked={l.include} onChange={(e) => edit(i, { include: e.target.checked })} aria-label={`Include ${l.name}`} className="size-4 accent-brand-600" />
@@ -140,10 +193,30 @@ export default function Restock() {
                   {l.confidence}
                 </span>
               </div>
-              <div className="flex items-center gap-3 pl-6 text-sm">
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.matched_item_id ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
-                  {l.matched_item_id ? 'restock' : 'new item'}
+              <div className="flex flex-wrap items-center gap-3 pl-6 text-sm">
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${matchedItem ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                  {matchedItem ? 'restock' : 'new item'}
                 </span>
+                {matchedItem && (
+                  <span className="text-xs text-ink-500">
+                    {matchedItem.name}{' '}
+                    <span className="tabular-nums">{matchedItem.stock} → {matchedItem.stock + l.qty}</span>
+                  </span>
+                )}
+                {aiMatchUnknown && (
+                  <span className="text-[10px] text-ink-400 italic">AI suggested an item not in your catalog</span>
+                )}
+                <select
+                  value={l.matched_item_id ?? ''}
+                  onChange={(e) => edit(i, { matched_item_id: e.target.value || null })}
+                  aria-label={`Match ${l.name} to inventory item`}
+                  className="rounded-md bg-surface border border-line px-2 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+                >
+                  <option value="">+ Create as new item</option>
+                  {catalog.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
                 <label className="flex items-center gap-1">
                   qty
                   <input
@@ -152,7 +225,7 @@ export default function Restock() {
                     className="w-14 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
                   />
                 </label>
-                {!l.matched_item_id && (
+                {!matchedItem && (
                   <label className="flex items-center gap-1">
                     ₱
                     <input
@@ -164,18 +237,29 @@ export default function Restock() {
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
           {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
           <div className="flex gap-2">
             <button onClick={reset} className="grow rounded-lg bg-ink-900/5 py-3.5 font-medium">Discard</button>
             <button
-              onClick={apply}
+              onClick={() => setShowConfirm(true)}
               disabled={phase === 'applying' || lines.every((l) => !l.include)}
               className="grow rounded-lg bg-green-600 text-white py-3.5 font-bold disabled:opacity-50"
             >
               {phase === 'applying' ? 'Applying…' : 'Apply to inventory'}
             </button>
           </div>
+          <ConfirmDialog
+            open={showConfirm}
+            title="Apply to inventory?"
+            message={applySummary(lines, catalog, catalogLoaded)}
+            confirmLabel="Apply"
+            busy={phase === 'applying'}
+            busyLabel="Applying…"
+            onConfirm={confirmApply}
+            onCancel={() => setShowConfirm(false)}
+          />
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Camera, CupSoda, LayoutGrid, List, ShoppingBasket, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -7,6 +7,7 @@ import { compressImage } from '../../lib/image'
 import type { Item } from '../../types'
 import ImageUploadField from '../../components/ImageUploadField'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import CameraAiMark from '../../components/CameraAiMark'
 
 type Draft = {
   id?: string
@@ -26,6 +27,7 @@ const VIEW_STORAGE_KEY = 'snacklabs.admin.itemsView'
 
 export default function Items() {
   const navigate = useNavigate()
+  const fileRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Item[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
@@ -129,7 +131,15 @@ export default function Items() {
 
   return (
     <div className="p-4 md:p-8 space-y-4 max-w-3xl">
-      <div className="flex items-center justify-between">
+      <input
+        ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) setDraft({ ...EMPTY, file: f })
+          e.target.value = ''
+        }}
+      />
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="font-display text-2xl font-bold">Items</h1>
         <div className="flex items-center gap-2">
           <button
@@ -139,11 +149,18 @@ export default function Items() {
             + Add item
           </button>
           <button
+            onClick={() => fileRef.current?.click()}
+            aria-label="Add item from photo"
+            className="rounded-md bg-brand-600 text-white p-2.5"
+          >
+            <Camera className="size-5" strokeWidth={2.5} aria-hidden="true" />
+          </button>
+          <button
             onClick={() => navigate('/admin/restock')}
             aria-label="AI restock"
             className="rounded-md bg-brand-600 text-white p-2.5"
           >
-            <Camera className="size-5" strokeWidth={2.5} aria-hidden="true" />
+            <CameraAiMark className="size-5" strokeWidth={2.5} />
           </button>
         </div>
       </div>

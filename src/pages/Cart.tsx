@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Landmark, ShoppingBasket, Smartphone, Trash2 } from 'lucide-react'
+import { Banknote, Landmark, ShoppingBasket, Smartphone, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCart } from '../context/CartContext'
 import { formatPeso } from '../lib/money'
 import ConfirmDialog from '../components/ConfirmDialog'
 import type { CartLine, PaymentMethod } from '../types'
+
+function methodDetail(m: PaymentMethod): string | null {
+  const name = m.account_name.trim()
+  const number = m.account_number.trim()
+  if (name && number) return `${name} · ${number}`
+  return name || number || null
+}
 
 export default function Cart() {
   const { lines, setLineQty, total, clear } = useCart()
@@ -96,20 +103,34 @@ export default function Cart() {
         {methods.length === 0 && (
           <p className="text-sm text-ink-500">No payment methods set up yet — ask your admin.</p>
         )}
-        {methods.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => setMethodId(m.id)}
-            className={`w-full rounded-md p-3 text-left flex items-center gap-3 transition ${
-              methodId === m.id ? 'bg-ink-900 text-white' : 'bg-surface-raised shadow-card'
-            }`}
-          >
-            {m.type === 'ewallet'
-              ? <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />
-              : <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
-            <span className="font-medium">{m.label}</span>
-          </button>
-        ))}
+        {methods.map((m) => {
+          const selected = methodId === m.id
+          const detail = methodDetail(m)
+          return (
+            <button
+              key={m.id}
+              onClick={() => setMethodId(m.id)}
+              className={`w-full rounded-md p-3 text-left flex items-center gap-3 transition ${
+                selected ? 'bg-ink-900 text-white' : 'bg-surface-raised shadow-card'
+              }`}
+            >
+              {m.type === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+              {m.type === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+              {m.type === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+              {m.type !== 'ewallet' && m.type !== 'bank' && m.type !== 'cash' && (
+                <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />
+              )}
+              <span className="flex flex-col min-w-0">
+                <span className="font-medium truncate">{m.label}</span>
+                {detail && (
+                  <span className={`text-xs truncate ${selected ? 'text-white/70' : 'text-ink-500'}`}>
+                    {detail}
+                  </span>
+                )}
+              </span>
+            </button>
+          )
+        })}
       </section>
 
       {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
