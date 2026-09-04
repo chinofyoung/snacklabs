@@ -26,8 +26,6 @@ export default function AdminOrders() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [showDeleteAll, setShowDeleteAll] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [pendingReject, setPendingReject] = useState<OrderRow | null>(null)
   const [pendingVoid, setPendingVoid] = useState<OrderRow | null>(null)
   const [voiding, setVoiding] = useState(false)
@@ -123,34 +121,9 @@ export default function AdminOrders() {
     }
   }
 
-  const deleteAll = async () => {
-    setDeleting(true)
-    try {
-      const { error } = await supabase.rpc('delete_all_orders')
-      if (error) {
-        alert(error.message)
-        return false
-      }
-      setPage(0)
-      await loadPage(0)
-      await loadSummary()
-      return true
-    } finally {
-      setDeleting(false)
-    }
-  }
-
   return (
     <div className="p-4 md:p-8 space-y-4 max-w-3xl">
-      <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">Orders</h1>
-        <button
-          onClick={() => setShowDeleteAll(true)}
-          className="text-sm text-red-600 font-medium"
-        >
-          Delete all
-        </button>
-      </div>
+      <h1 className="font-display text-2xl font-bold">Orders</h1>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
           <button
@@ -274,22 +247,6 @@ export default function AdminOrders() {
           setPendingReject(null)
         }}
         onCancel={() => setPendingReject(null)}
-      />
-
-      <ConfirmDialog
-        open={showDeleteAll}
-        destructive
-        requireTyped="DELETE"
-        title="Delete all transactions?"
-        message="This permanently deletes every order and its line items. AI cost history is kept. This cannot be undone."
-        confirmLabel="Delete all"
-        busy={deleting}
-        busyLabel="Deleting…"
-        onConfirm={async () => {
-          const ok = await deleteAll()
-          if (ok) setShowDeleteAll(false)
-        }}
-        onCancel={() => setShowDeleteAll(false)}
       />
 
       <ConfirmDialog
