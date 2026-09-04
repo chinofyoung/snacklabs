@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router'
-import { Popcorn } from 'lucide-react'
+import CookieMark from './CookieMark'
 import { useAuth } from '../context/AuthContext'
 
 function Splash() {
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center gap-2 text-ink-500">
-      <Popcorn className="size-10 animate-pulse" strokeWidth={2.5} aria-hidden="true" />
+      <CookieMark className="size-10 animate-pulse" />
       <span className="text-sm">Loading…</span>
     </div>
   )

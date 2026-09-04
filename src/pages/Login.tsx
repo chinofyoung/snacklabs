@@ -1,4 +1,3 @@
-import { Popcorn } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
@@ -20,18 +19,15 @@ export default function Login() {
       <div className="relative w-full max-w-xs">
         {/* The price tag: this app's signature element — a hand-labelled shelf tag,
             complete with a punched hole, standing in for the physical pantry sign. */}
-        <div className="relative mx-auto w-fit">
-          <div className="rounded-2xl bg-brand-50 px-8 pt-8 pb-7 text-center shadow-float">
-            <Popcorn className="size-14 mx-auto mb-2 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
-            <h1 className="font-display text-3xl font-extrabold text-ink-900">SnackLabs</h1>
-            <p className="text-ink-500 mt-1 text-sm">The office pantry, in your pocket.</p>
-          </div>
+        <div className="rounded-2xl bg-logo-cream px-8 pt-8 pb-7 text-center shadow-float">
+          <img src="/assets/snacklabs-logo.png" alt="SnackLabs" width={1182} height={372} className="w-56 h-auto mx-auto" />
+          <p className="text-ink-500 mt-1 text-sm">The office pantry, in your pocket.</p>
         </div>
 
         <div className="mt-10 space-y-4">
           <button
             onClick={signIn}
-            className="w-full rounded-xl bg-surface-raised text-ink-900 py-3.5 font-semibold shadow-card active:scale-[0.98] transition flex items-center justify-center gap-2.5"
+            className="w-full rounded-2xl bg-surface-raised text-ink-900 py-3.5 font-semibold shadow-card active:scale-[0.98] transition flex items-center justify-center gap-2.5"
           >
             <GoogleIcon />
             Continue with Google

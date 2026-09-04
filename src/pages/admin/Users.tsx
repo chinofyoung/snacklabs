@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, ShieldCheck, Users as UsersIcon } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 interface UserRow {
   id: string
@@ -17,6 +18,7 @@ export default function Users() {
   const [query, setQuery] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingRevoke, setPendingRevoke] = useState<UserRow | null>(null)
 
   const load = () =>
     supabase.from('profiles').select('id, email, full_name, is_admin, created_at').order('created_at')
@@ -40,7 +42,6 @@ export default function Users() {
   }, [users, query])
 
   const setAdmin = async (user: UserRow, isAdmin: boolean) => {
-    if (!isAdmin && !confirm(`Revoke admin access for ${user.full_name || user.email}?`)) return
     setBusyId(user.id)
     setError(null)
     const { error: upErr } = await supabase.from('profiles').update({ is_admin: isAdmin }).eq('id', user.id)
@@ -98,7 +99,7 @@ export default function Users() {
                 )}
                 {u.is_admin ? (
                   <button
-                    onClick={() => setAdmin(u, false)}
+                    onClick={() => setPendingRevoke(u)}
                     disabled={busy}
                     className="shrink-0 text-sm text-red-500 px-2 py-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
                   >
@@ -118,6 +119,21 @@ export default function Users() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        destructive
+        title="Revoke admin access?"
+        message={<>Revoke admin access for <b>{pendingRevoke?.full_name || pendingRevoke?.email}</b>?</>}
+        confirmLabel="Revoke"
+        busy={busyId === pendingRevoke?.id}
+        busyLabel="Revoking…"
+        onConfirm={async () => {
+          if (pendingRevoke) await setAdmin(pendingRevoke, false)
+          setPendingRevoke(null)
+        }}
+        onCancel={() => setPendingRevoke(null)}
+      />
     </div>
   )
 }

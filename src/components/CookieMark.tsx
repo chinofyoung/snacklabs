@@ -1,0 +1,27 @@
+interface CookieMarkProps {
+  className?: string
+}
+
+export default function CookieMark({ className }: CookieMarkProps) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" aria-hidden="true" className={className}>
+      <path
+        d="M40.5 7.5 A26 26 0 1 0 56.5 39.5 A7.5 7.5 0 0 1 49 32 A7.5 7.5 0 0 1 41.5 24.5 A7.5 7.5 0 0 1 36 12 A26 26 0 0 0 40.5 7.5 Z"
+        transform="rotate(-96 32 32)"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={22} cy={23} r={2.6} fill="currentColor" />
+      <circle cx={35} cy={44} r={2.6} fill="currentColor" />
+      <circle cx={20} cy={41} r={2.6} fill="currentColor" />
+      <circle cx={41} cy={31} r={2.6} fill="currentColor" />
+      <circle cx={28} cy={33} r={2.6} fill="currentColor" />
+      <circle cx={31} cy={15} r={2.6} fill="currentColor" />
+      <circle cx={55} cy={9} r={1.6} fill="currentColor" />
+      <circle cx={59} cy={16} r={1.2} fill="currentColor" />
+    </svg>
+  )
+}

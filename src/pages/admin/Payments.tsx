@@ -3,6 +3,7 @@ import { Banknote, CreditCard, Landmark, Smartphone } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { compressImage } from '../../lib/image'
 import type { PaymentMethod } from '../../types'
+import ImageUploadField from '../../components/ImageUploadField'
 
 type Draft = {
   id?: string
@@ -139,7 +140,7 @@ export default function PaymentMethods() {
           <div className="bg-surface-raised rounded-t-xl md:rounded-xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-display font-bold text-lg">{draft.id ? 'Edit method' : 'New payment method'}</h2>
             <label className="block space-y-1">
-              <span className="text-xs font-medium text-ink-500">Label (e.g. GCash, BPI)</span>
+              <span className="block text-xs font-medium text-ink-500">Label (e.g. GCash, BPI)</span>
               <input className={inputCls} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
             </label>
             <div className="flex gap-2">
@@ -157,24 +158,26 @@ export default function PaymentMethods() {
               ))}
             </div>
             <label className="block space-y-1">
-              <span className="text-xs font-medium text-ink-500">
+              <span className="block text-xs font-medium text-ink-500">
                 {draft.type === 'cash' ? 'Label / where to pay' : 'Account name'}
               </span>
               <input className={inputCls} value={draft.account_name} onChange={(e) => setDraft({ ...draft, account_name: e.target.value })} />
             </label>
             {draft.type !== 'cash' && (
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-ink-500">Account / mobile number</span>
+                <span className="block text-xs font-medium text-ink-500">Account / mobile number</span>
                 <input className={inputCls} value={draft.account_number} onChange={(e) => setDraft({ ...draft, account_number: e.target.value })} />
               </label>
             )}
             {draft.type === 'cash' ? (
               <p className="text-xs text-ink-500">No QR needed for cash.</p>
             ) : (
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-ink-500">QR code image</span>
-                <input type="file" accept="image/*" className="text-sm" onChange={(e) => setDraft({ ...draft, file: e.target.files?.[0] ?? null })} />
-              </label>
+              <ImageUploadField
+                label="QR code image"
+                file={draft.file ?? null}
+                currentUrl={draft.existing_qr}
+                onChange={(f) => setDraft({ ...draft, file: f })}
+              />
             )}
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
             <div className="flex gap-2 pt-1">

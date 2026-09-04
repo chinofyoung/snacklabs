@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Landmark, ShoppingBasket, Smartphone } from 'lucide-react'
+import { Landmark, ShoppingBasket, Smartphone, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCart } from '../context/CartContext'
 import { formatPeso } from '../lib/money'
-import type { PaymentMethod } from '../types'
+import ConfirmDialog from '../components/ConfirmDialog'
+import type { CartLine, PaymentMethod } from '../types'
 
 export default function Cart() {
   const { lines, setLineQty, total, clear } = useCart()
@@ -12,6 +13,7 @@ export default function Cart() {
   const [methodId, setMethodId] = useState<string | null>(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<CartLine | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export default function Cart() {
 
   if (lines.length === 0) {
     return (
-      <div className="max-w-md mx-auto min-h-dvh flex flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="max-w-md mx-auto min-h-dvh flex flex-col items-center justify-center gap-3 px-6 text-center app-frame">
         <ShoppingBasket className="size-14 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
         <p className="text-ink-700 font-medium">Your cart is empty</p>
         <p className="text-ink-500 text-sm -mt-2">Add something from the shelf to get started.</p>
@@ -55,7 +57,7 @@ export default function Cart() {
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-6">
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-6 app-frame">
       <header className="flex items-center gap-3">
         <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
         <h1 className="font-display text-xl font-bold">Your cart</h1>
@@ -73,11 +75,18 @@ export default function Cart() {
               <p className="font-medium text-sm truncate">{item.name}</p>
               <p className="text-brand-600 font-bold text-sm tabular-nums">{formatPeso(item.price)}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Stepper onClick={() => setLineQty(item.id, qty - 1)} label={`Decrease ${item.name} quantity`}>−</Stepper>
               <span className="w-6 text-center font-medium tabular-nums">{qty}</span>
               <Stepper onClick={() => setLineQty(item.id, qty + 1)} label={`Increase ${item.name} quantity`}>+</Stepper>
             </div>
+            <button
+              onClick={() => setPendingRemove({ item, qty })}
+              aria-label={`Remove ${item.name} from cart`}
+              className="size-8 shrink-0 rounded-full text-ink-500 hover:text-red-600 active:scale-90 transition flex items-center justify-center ml-0.5"
+            >
+              <Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" />
+            </button>
           </div>
         ))}
       </div>
@@ -112,6 +121,19 @@ export default function Cart() {
       >
         {placing ? 'Placing order…' : `Pay ${formatPeso(total)}`}
       </button>
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        destructive
+        title="Remove item?"
+        message={<>Remove <b>{pendingRemove?.item.name}</b> from your cart?</>}
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (pendingRemove) setLineQty(pendingRemove.item.id, 0)
+          setPendingRemove(null)
+        }}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   )
 }

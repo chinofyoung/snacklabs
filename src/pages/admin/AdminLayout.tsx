@@ -1,5 +1,6 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { ArrowLeft, CupSoda, LayoutDashboard, Popcorn, ReceiptText, Settings, Store, Users } from 'lucide-react'
+import { ArrowLeft, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, Users } from 'lucide-react'
+import CookieMark from '../../components/CookieMark'
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -14,7 +15,7 @@ export default function AdminLayout() {
     <div className="min-h-dvh md:flex bg-surface">
       <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-line bg-surface-raised p-4 gap-1">
         <Link to="/" className="font-display font-extrabold text-lg mb-4 rounded-md flex items-center gap-1.5">
-          <Popcorn className="size-6 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
+          <CookieMark className="size-6 text-brand-600" />
           SnackLabs
         </Link>
         {NAV.map((n) => (

@@ -2,11 +2,11 @@
 
 @theme {
   /* Brand: warm orange accent, used for primary actions only */
-  --color-brand-50: #fff3e8;
-  --color-brand-100: #ffe4cc;
-  --color-brand-500: #f97316;
-  --color-brand-600: #ea580c;
-  --color-brand-700: #c2410c;
+  --color-brand-50: #fff2e9;
+  --color-brand-100: #ffe1cc;
+  --color-brand-500: #ff771b;
+  --color-brand-600: #f25c05;
+  --color-brand-700: #ca4505;
 
   /* Warm neutral ink + surface scale (not cold grays) */
   --color-ink-900: #221d17;
@@ -16,6 +16,10 @@
   --color-surface: #fbf9f6;
   --color-surface-raised: #ffffff;
   --color-line: #ede7de;
+
+  /* Matches the baked-in cream background of the wordmark PNG */
+  --color-logo-cream: #faf6f1;
+  --color-backdrop: #17130f; /* Desktop-only dark backdrop behind the app column */
 
   /* Type scale */
   --font-display: ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
@@ -30,7 +34,7 @@
 
   /* Single soft shadow token, used sparingly */
   --shadow-card: 0 1px 2px rgba(34, 29, 23, 0.04), 0 8px 20px -12px rgba(34, 29, 23, 0.12);
-  --shadow-float: 0 12px 28px -8px rgba(234, 88, 12, 0.35);
+  --shadow-float: 0 12px 28px -8px rgba(242, 92, 5, 0.35);
 }
 
 @layer base {
@@ -42,6 +46,12 @@
   body {
     background: var(--color-surface);
     color: var(--color-ink-900);
+  }
+
+  @media (min-width: 48rem) {
+    body {
+      background: var(--color-backdrop);
+    }
   }
 
   h1, h2, h3 {
@@ -86,6 +96,18 @@
 
   .shadow-float {
     box-shadow: var(--shadow-float);
+  }
+
+  .app-frame {
+    background: var(--color-surface);
+  }
+
+  @media (min-width: 48rem) {
+    .app-frame {
+      box-shadow:
+        0 0 0 1px var(--color-line),
+        0 24px 60px -24px rgba(0, 0, 0, 0.6);
+    }
   }
 }
 

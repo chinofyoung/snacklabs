@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router'
 import { ReceiptText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
+import ConfirmDialog from '../../components/ConfirmDialog'
+import { PERIODS, periodStart, periodLabel, type Period } from '../../lib/period'
 import type { Order, OrderStatus } from '../../types'
 
 interface OrderRow extends Order {
@@ -15,6 +17,7 @@ const PAGE_SIZE = 10
 export default function AdminOrders() {
   const [params, setParams] = useSearchParams()
   const filter = (params.get('filter') ?? 'needs_review') as OrderStatus | 'all'
+  const period = (params.get('period') ?? 'all') as Period
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
@@ -24,8 +27,10 @@ export default function AdminOrders() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [showDeleteAll, setShowDeleteAll] = useState(false)
-  const [confirmText, setConfirmText] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [pendingReject, setPendingReject] = useState<OrderRow | null>(null)
+  const [summaryCount, setSummaryCount] = useState(0)
+  const [summaryTotal, setSummaryTotal] = useState(0)
 
   const loadPage = useCallback(async (p: number) => {
     let q = supabase.from('orders')
@@ -33,13 +38,27 @@ export default function AdminOrders() {
       .order('created_at', { ascending: false })
       .range(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE - 1)
     if (filter !== 'all') q = q.eq('status', filter)
+    if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
     const { data } = await q
     const rows = (data as OrderRow[]) ?? []
     setOrders((prev) => (p === 0 ? rows : [...prev, ...rows]))
     setHasMore(rows.length === PAGE_SIZE)
-  }, [filter])
+  }, [filter, period])
 
-  useEffect(() => { setPage(0); loadPage(0) }, [loadPage])
+  // PostgREST has no SUM aggregate: the peso total is summed client-side from
+  // up to 5000 matching rows. The order count uses Supabase's exact count,
+  // which reflects the full filtered match regardless of the range cap.
+  const loadSummary = useCallback(async () => {
+    let q = supabase.from('orders').select('total', { count: 'exact' }).range(0, 4999)
+    if (filter !== 'all') q = q.eq('status', filter)
+    if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
+    const { data, count } = await q
+    const rows = (data as { total: number }[]) ?? []
+    setSummaryCount(count ?? 0)
+    setSummaryTotal(rows.reduce((sum, r) => sum + Number(r.total), 0))
+  }, [filter, period])
+
+  useEffect(() => { setPage(0); loadPage(0); loadSummary() }, [loadPage, loadSummary])
 
   const openOrder = async (o: OrderRow) => {
     setOpen(open === o.id ? null : o.id)
@@ -64,10 +83,10 @@ export default function AdminOrders() {
     setOpen(null)
     setPage(0)
     await loadPage(0)
+    await loadSummary()
   }
 
   const reject = async (o: OrderRow) => {
-    if (!confirm('Cancel this order?')) return
     setBusy(true)
     const { error: rejErr } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id)
     if (rejErr) {
@@ -79,6 +98,7 @@ export default function AdminOrders() {
     setOpen(null)
     setPage(0)
     await loadPage(0)
+    await loadSummary()
   }
 
   const deleteAll = async () => {
@@ -87,12 +107,12 @@ export default function AdminOrders() {
       const { error } = await supabase.rpc('delete_all_orders')
       if (error) {
         alert(error.message)
-        return
+        return false
       }
-      setShowDeleteAll(false)
-      setConfirmText('')
       setPage(0)
       await loadPage(0)
+      await loadSummary()
+      return true
     } finally {
       setDeleting(false)
     }
@@ -113,7 +133,8 @@ export default function AdminOrders() {
         {FILTERS.map((f) => (
           <button
             key={f}
-            onClick={() => setParams({ filter: f })}
+            onClick={() => setParams((prev) => { const next = new URLSearchParams(prev); next.set('filter', f); return next })}
+            aria-pressed={filter === f}
             className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition ${
               filter === f ? 'bg-ink-900 text-white' : 'bg-surface-raised text-ink-500 shadow-card'
             }`}
@@ -122,6 +143,32 @@ export default function AdminOrders() {
           </button>
         ))}
       </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {PERIODS.map((p) => (
+          <button
+            key={p}
+            onClick={() => setParams((prev) => { const next = new URLSearchParams(prev); next.set('period', p); return next })}
+            aria-pressed={period === p}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition ${
+              period === p ? 'bg-ink-900 text-white' : 'bg-surface-raised text-ink-500 shadow-card'
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-sm text-ink-500">
+        {periodLabel(period)} ·{' '}
+        {summaryCount === 0 ? (
+          'No orders'
+        ) : (
+          <>
+            {summaryCount} order{summaryCount === 1 ? '' : 's'} ·{' '}
+            <span className="tabular-nums">{formatPeso(summaryTotal)}</span>
+          </>
+        )}
+      </p>
 
       <div className="space-y-2">
         {orders.length === 0 && (
@@ -161,7 +208,7 @@ export default function AdminOrders() {
                   : o.receipt_image_url && <p className="text-xs text-ink-500">Loading receipt…</p>}
                 {['needs_review', 'verifying', 'awaiting_payment'].includes(o.status) && (
                   <div className="flex gap-2">
-                    <button onClick={() => reject(o)} disabled={busy} className="grow rounded-md bg-red-50 text-red-600 py-3 font-medium disabled:opacity-50">
+                    <button onClick={() => setPendingReject(o)} disabled={busy} className="grow rounded-md bg-red-50 text-red-600 py-3 font-medium disabled:opacity-50">
                       Reject
                     </button>
                     <button onClick={() => approve(o)} disabled={busy} className="grow rounded-md bg-green-600 text-white py-3 font-medium disabled:opacity-50">
@@ -185,49 +232,36 @@ export default function AdminOrders() {
         </button>
       )}
 
-      {showDeleteAll && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-          onClick={() => { setShowDeleteAll(false); setConfirmText('') }}
-        >
-          <div
-            className="bg-white rounded-lg shadow-card max-w-sm w-full p-5 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="font-display text-lg font-bold">Delete all transactions?</h2>
-            <p className="text-sm text-ink-500">
-              This permanently deletes every order and its line items. AI cost history is kept. This cannot be undone.
-            </p>
-            <div className="space-y-1">
-              <label htmlFor="confirm-delete-all" className="text-sm font-medium text-ink-700">
-                Type DELETE to confirm
-              </label>
-              <input
-                id="confirm-delete-all"
-                type="text"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                className="w-full rounded-md border border-line px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setShowDeleteAll(false); setConfirmText('') }}
-                className="grow rounded-md bg-surface text-ink-700 py-3 font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={deleteAll}
-                disabled={confirmText !== 'DELETE' || deleting}
-                className="grow rounded-md bg-red-600 text-white py-3 font-medium disabled:opacity-50"
-              >
-                {deleting ? 'Deleting…' : 'Delete all'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={pendingReject !== null}
+        destructive
+        title="Cancel this order?"
+        message={<>Cancel the order from <b>{pendingReject?.profiles?.full_name || pendingReject?.profiles?.email || 'this customer'}</b> ({pendingReject ? formatPeso(pendingReject.total) : ''})?</>}
+        confirmLabel="Cancel order"
+        cancelLabel="Keep order"
+        busy={busy}
+        onConfirm={async () => {
+          if (pendingReject) await reject(pendingReject)
+          setPendingReject(null)
+        }}
+        onCancel={() => setPendingReject(null)}
+      />
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        destructive
+        requireTyped="DELETE"
+        title="Delete all transactions?"
+        message="This permanently deletes every order and its line items. AI cost history is kept. This cannot be undone."
+        confirmLabel="Delete all"
+        busy={deleting}
+        busyLabel="Deleting…"
+        onConfirm={async () => {
+          const ok = await deleteAll()
+          if (ok) setShowDeleteAll(false)
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
     </div>
   )
 }

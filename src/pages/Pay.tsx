@@ -37,10 +37,10 @@ export default function Pay() {
     return () => clearTimeout(t)
   }, [order?.status, countdown, navigate])
 
-  if (!order) return <div className="min-h-dvh flex items-center justify-center text-ink-500">Loading…</div>
+  if (!order) return <div className="max-w-md mx-auto min-h-dvh flex items-center justify-center text-ink-500 app-frame">Loading…</div>
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5">
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5 app-frame">
       <header className="flex items-center gap-3">
         <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
         <h1 className="font-display text-xl font-bold">Scan & pay</h1>

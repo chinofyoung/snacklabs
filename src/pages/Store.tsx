@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { PackageOpen, Popcorn, Search } from 'lucide-react'
+import { PackageOpen, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Item } from '../types'
 import ItemCard from '../components/ItemCard'
 import CartBar from '../components/CartBar'
+import CookieMark from '../components/CookieMark'
 import { useAuth } from '../context/AuthContext'
 
 export default function Store() {
@@ -37,11 +38,11 @@ export default function Store() {
   )
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh pb-28">
+    <div className="max-w-md mx-auto min-h-dvh pb-28 app-frame">
       <header className="sticky top-0 z-10 bg-surface/90 backdrop-blur px-4 pt-4 pb-3 space-y-3 border-b border-line">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-xl font-extrabold flex items-center gap-1.5">
-            <Popcorn className="size-6 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
+            <CookieMark className="size-6 text-brand-600" />
             SnackLabs
           </h1>
           <div className="flex items-center gap-4 text-sm">
