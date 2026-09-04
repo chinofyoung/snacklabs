@@ -15,12 +15,13 @@ function methodDetail(m: PaymentMethod): string | null {
 }
 
 export default function Cart() {
-  const { lines, setLineQty, total, clear } = useCart()
+  const { lines, setLineQty, total, clear, count } = useCart()
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [methodId, setMethodId] = useState<string | null>(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingRemove, setPendingRemove] = useState<CartLine | null>(null)
+  const [confirmingOrder, setConfirmingOrder] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export default function Cart() {
       })
   }, [])
 
-  const placeOrder = async () => {
+  const placeOrder = async (): Promise<boolean> => {
     setPlacing(true)
     setError(null)
     const { data, error } = await supabase.rpc('create_order', {
@@ -46,11 +47,19 @@ export default function Cart() {
           ? 'Someone beat you to it — an item just went out of stock. Adjust your cart.'
           : error.message,
       )
-      return
+      return false
     }
     clear()
     navigate(`/pay/${data}`)
+    return true
   }
+
+  const confirmPlaceOrder = async () => {
+    await placeOrder()
+    setConfirmingOrder(false)
+  }
+
+  const selectedMethod = methods.find((m) => m.id === methodId) ?? null
 
   if (lines.length === 0) {
     return (
@@ -137,7 +146,7 @@ export default function Cart() {
 
       <button
         disabled={placing || !methodId}
-        onClick={placeOrder}
+        onClick={() => setConfirmingOrder(true)}
         className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold text-lg disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
       >
         {placing ? 'Placing order…' : `Pay ${formatPeso(total)}`}
@@ -154,6 +163,20 @@ export default function Cart() {
           setPendingRemove(null)
         }}
         onCancel={() => setPendingRemove(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmingOrder}
+        title="Place this order?"
+        message={
+          <>{count} item{count === 1 ? '' : 's'} · <b>{formatPeso(total)}</b>{selectedMethod ? <> via {selectedMethod.label}</> : null}</>
+        }
+        confirmLabel="Place order"
+        cancelLabel="Keep shopping"
+        busy={placing}
+        busyLabel="Placing order…"
+        onConfirm={confirmPlaceOrder}
+        onCancel={() => setConfirmingOrder(false)}
       />
     </div>
   )
