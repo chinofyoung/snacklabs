@@ -1,9 +1,21 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { ArrowLeft, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, Users } from 'lucide-react'
+import { ArrowLeft, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import CookieMark from '../../components/CookieMark'
 
-const NAV = [
+interface NavItem {
+  to: string
+  label: string
+  icon: LucideIcon
+  end: boolean
+  // Keeps a section out of the space-constrained mobile bottom bar
+  // (already at its width budget) while still showing it in the desktop sidebar.
+  mobileHidden?: boolean
+}
+
+const NAV: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/admin/sales', label: 'Sales', icon: TrendingUp, end: false, mobileHidden: true },
   { to: '/admin/items', label: 'Items', icon: CupSoda, end: false },
   { to: '/admin/orders', label: 'Orders', icon: ReceiptText, end: false },
   { to: '/admin/users', label: 'Users', icon: Users, end: false },
@@ -54,7 +66,7 @@ export default function AdminLayout() {
           <Store className="size-6" strokeWidth={2.5} aria-hidden="true" />
           Store
         </Link>
-        {NAV.map((n) => (
+        {NAV.filter((n) => !n.mobileHidden).map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
