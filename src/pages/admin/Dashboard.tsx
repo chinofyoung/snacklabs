@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { PartyPopper, Sparkles } from 'lucide-react'
+import { ChevronRight, PartyPopper, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import type { Item, Order } from '../../types'
@@ -43,12 +43,18 @@ export default function Dashboard() {
     <div className="p-4 md:p-8 space-y-6 max-w-3xl">
       <h1 className="font-display text-2xl font-bold">Dashboard</h1>
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg bg-surface-raised p-5 shadow-card">
-          <p className="text-sm text-ink-500">Sales today</p>
+        <Link to="/admin/sales" className="rounded-lg bg-surface-raised p-5 shadow-card transition hover:shadow-none">
+          <p className="text-sm text-ink-500 flex items-center justify-between">
+            Sales today
+            <ChevronRight className="size-4 text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+          </p>
           <p className="text-2xl font-black text-brand-600 tabular-nums">{formatPeso(todaySales)}</p>
-        </div>
+        </Link>
         <Link to="/admin/orders?filter=needs_review" className="rounded-lg bg-surface-raised p-5 shadow-card transition hover:shadow-none">
-          <p className="text-sm text-ink-500">Needs review</p>
+          <p className="text-sm text-ink-500 flex items-center justify-between">
+            Needs review
+            <ChevronRight className="size-4 text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+          </p>
           <p className={`text-2xl font-black tabular-nums ${reviewCount > 0 ? 'text-amber-600' : 'text-ink-900'}`}>{reviewCount}</p>
         </Link>
         <div className="rounded-lg bg-surface-raised p-5 shadow-card col-span-2">
