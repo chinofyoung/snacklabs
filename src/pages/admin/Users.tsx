@@ -13,6 +13,8 @@ interface UserRow {
   created_at: string
 }
 
+const PAGE_SIZE = 10
+
 export default function Users() {
   const { profile } = useAuth()
   const [users, setUsers] = useState<UserRow[]>([])
@@ -20,6 +22,13 @@ export default function Users() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pendingRevoke, setPendingRevoke] = useState<UserRow | null>(null)
+  // How many of `filtered` to render. Paginated client-side (a slice of the already-
+  // loaded array) rather than via `.range()` on the query: `filtered` searches the
+  // full `users` list below, so if `load()` only fetched the first page server-side,
+  // the search box would silently stop finding anyone past row 10. Reset to PAGE_SIZE
+  // whenever `query` changes (see effect below) so an expanded view doesn't leave a
+  // stale, oddly-deep slice sitting on top of a fresh (usually much shorter) result set.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const [allowlist, setAllowlist] = useState<EmailAllowlistEntry[]>([])
   const [newEmail, setNewEmail] = useState('')
@@ -28,6 +37,13 @@ export default function Users() {
   const [removeBusyId, setRemoveBusyId] = useState<string | null>(null)
   const [pendingRemove, setPendingRemove] = useState<EmailAllowlistEntry | null>(null)
   const [allowlistMessage, setAllowlistMessage] = useState<string | null>(null)
+  // Same client-side slicing as `visibleCount` above, and same reasoning (no search
+  // here, but no point paginating the fetch when the whole list is tiny). Deliberately
+  // NOT reset by loadAllowlist(): after an add/remove, `allowlist.slice(0, allowlistVisible)`
+  // clamps safely on its own if the array got shorter (no stale/blank rows are possible),
+  // and leaving the count alone avoids the more surprising case of a resize collapsing
+  // an already-expanded list back down to 10 rows out from under the admin.
+  const [allowlistVisible, setAllowlistVisible] = useState(PAGE_SIZE)
 
   const load = () =>
     supabase.from('profiles').select('id, email, full_name, is_admin, created_at').order('created_at')
@@ -62,6 +78,15 @@ export default function Users() {
       u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     )
   }, [users, query])
+
+  // A fresh search term can match far fewer rows than were previously revealed —
+  // without this, expanding to 40 rows then typing a query that matches 3 people
+  // would silently keep slicing at 40 (harmless here, but pointless) instead of
+  // starting the new result set back at a single page.
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [query])
+
+  const visibleUsers = filtered.slice(0, visibleCount)
+  const visibleAllowlist = allowlist.slice(0, allowlistVisible)
 
   const trimmedNewEmail = newEmail.trim().toLowerCase()
   const isNewEmailValid = trimmedNewEmail.length > 0 && trimmedNewEmail.includes('@')
@@ -143,48 +168,61 @@ export default function Users() {
           <p className="text-ink-700 font-medium">No users found</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((u) => {
-            const isYou = profile?.id === u.id
-            const busy = busyId === u.id
-            return (
-              <div key={u.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
-                <div className="grow min-w-0">
-                  <p className="font-medium text-sm truncate flex items-center gap-1.5">
-                    {u.full_name || u.email}
-                    {isYou && (
-                      <span className="rounded-full bg-ink-900/5 text-ink-500 text-[10px] font-medium px-1.5 py-0.5">You</span>
-                    )}
-                  </p>
-                  <p className="text-xs text-ink-500 truncate">{u.email}</p>
+        <>
+          <div className="space-y-2">
+            {visibleUsers.map((u) => {
+              const isYou = profile?.id === u.id
+              const busy = busyId === u.id
+              return (
+                <div key={u.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
+                  <div className="grow min-w-0">
+                    <p className="font-medium text-sm truncate flex items-center gap-1.5">
+                      {u.full_name || u.email}
+                      {isYou && (
+                        <span className="rounded-full bg-ink-900/5 text-ink-500 text-[10px] font-medium px-1.5 py-0.5">You</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-ink-500 truncate">{u.email}</p>
+                  </div>
+                  {u.is_admin && (
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[10px] font-medium px-2 py-1">
+                      <ShieldCheck className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
+                      Admin
+                    </span>
+                  )}
+                  {u.is_admin ? (
+                    <button
+                      onClick={() => setPendingRevoke(u)}
+                      disabled={busy}
+                      className="shrink-0 text-sm text-red-500 px-2 py-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
+                    >
+                      {busy ? 'Working…' : 'Revoke admin'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setAdmin(u, true)}
+                      disabled={busy}
+                      className="shrink-0 text-sm bg-ink-900 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+                    >
+                      {busy ? 'Working…' : 'Make admin'}
+                    </button>
+                  )}
                 </div>
-                {u.is_admin && (
-                  <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[10px] font-medium px-2 py-1">
-                    <ShieldCheck className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
-                    Admin
-                  </span>
-                )}
-                {u.is_admin ? (
-                  <button
-                    onClick={() => setPendingRevoke(u)}
-                    disabled={busy}
-                    className="shrink-0 text-sm text-red-500 px-2 py-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
-                  >
-                    {busy ? 'Working…' : 'Revoke admin'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setAdmin(u, true)}
-                    disabled={busy}
-                    className="shrink-0 text-sm bg-ink-900 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
-                  >
-                    {busy ? 'Working…' : 'Make admin'}
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+          <p className="text-xs text-ink-500">
+            Showing {visibleUsers.length} of {filtered.length} user{filtered.length === 1 ? '' : 's'}
+          </p>
+          {filtered.length > visibleCount && (
+            <button
+              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+              className="w-full rounded-2xl bg-white shadow-sm py-3.5 font-medium text-ink-900 active:scale-[0.98] transition"
+            >
+              Show more
+            </button>
+          )}
+        </>
       )}
 
       <ConfirmDialog
@@ -238,29 +276,42 @@ export default function Users() {
       {allowlist.length === 0 ? (
         <p className="text-sm text-ink-500">No allowed emails yet</p>
       ) : (
-        <div className="space-y-2">
-          {allowlist.map((entry) => {
-            const busy = removeBusyId === entry.id
-            return (
-              <div key={entry.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
-                <div className="grow min-w-0">
-                  <p className="font-medium text-sm truncate flex items-center gap-1.5">
-                    <Mail className="size-3.5 text-ink-500 shrink-0" strokeWidth={2.5} aria-hidden="true" />
-                    {entry.email}
-                  </p>
-                  {entry.note && <p className="text-xs text-ink-500 truncate">{entry.note}</p>}
+        <>
+          <div className="space-y-2">
+            {visibleAllowlist.map((entry) => {
+              const busy = removeBusyId === entry.id
+              return (
+                <div key={entry.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
+                  <div className="grow min-w-0">
+                    <p className="font-medium text-sm truncate flex items-center gap-1.5">
+                      <Mail className="size-3.5 text-ink-500 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+                      {entry.email}
+                    </p>
+                    {entry.note && <p className="text-xs text-ink-500 truncate">{entry.note}</p>}
+                  </div>
+                  <button
+                    onClick={() => setPendingRemove(entry)}
+                    disabled={busy}
+                    className="shrink-0 text-sm text-red-500 px-2 py-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {busy ? 'Working…' : 'Remove'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => setPendingRemove(entry)}
-                  disabled={busy}
-                  className="shrink-0 text-sm text-red-500 px-2 py-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
-                >
-                  {busy ? 'Working…' : 'Remove'}
-                </button>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+          <p className="text-xs text-ink-500">
+            Showing {visibleAllowlist.length} of {allowlist.length} email{allowlist.length === 1 ? '' : 's'}
+          </p>
+          {allowlist.length > allowlistVisible && (
+            <button
+              onClick={() => setAllowlistVisible((c) => c + PAGE_SIZE)}
+              className="w-full rounded-2xl bg-white shadow-sm py-3.5 font-medium text-ink-900 active:scale-[0.98] transition"
+            >
+              Show more
+            </button>
+          )}
+        </>
       )}
 
       <ConfirmDialog
