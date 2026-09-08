@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, ShieldCheck, Users as UsersIcon } from 'lucide-react'
+import { Mail, Search, ShieldCheck, Users as UsersIcon } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import type { EmailAllowlistEntry } from '../../types'
 
 interface UserRow {
   id: string
@@ -20,6 +21,14 @@ export default function Users() {
   const [error, setError] = useState<string | null>(null)
   const [pendingRevoke, setPendingRevoke] = useState<UserRow | null>(null)
 
+  const [allowlist, setAllowlist] = useState<EmailAllowlistEntry[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [newNote, setNewNote] = useState('')
+  const [addBusy, setAddBusy] = useState(false)
+  const [removeBusyId, setRemoveBusyId] = useState<string | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<EmailAllowlistEntry | null>(null)
+  const [allowlistMessage, setAllowlistMessage] = useState<string | null>(null)
+
   const load = () =>
     supabase.from('profiles').select('id, email, full_name, is_admin, created_at').order('created_at')
       .then(({ data, error: fetchErr }) => {
@@ -33,6 +42,19 @@ export default function Users() {
 
   useEffect(() => { load() }, [])
 
+  const loadAllowlist = () =>
+    supabase.from('email_allowlist').select('id, email, note, created_at').order('created_at')
+      .then(({ data, error: fetchErr }) => {
+        if (fetchErr) {
+          setError(fetchErr.message)
+          return
+        }
+        setError(null)
+        setAllowlist((data as EmailAllowlistEntry[]) ?? [])
+      })
+
+  useEffect(() => { loadAllowlist() }, [])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return users
@@ -40,6 +62,9 @@ export default function Users() {
       u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     )
   }, [users, query])
+
+  const trimmedNewEmail = newEmail.trim().toLowerCase()
+  const isNewEmailValid = trimmedNewEmail.length > 0 && trimmedNewEmail.includes('@')
 
   const setAdmin = async (user: UserRow, isAdmin: boolean) => {
     setBusyId(user.id)
@@ -52,6 +77,48 @@ export default function Users() {
     }
     await load()
     setBusyId(null)
+  }
+
+  const addEmail = async () => {
+    const email = newEmail.trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      setError('Enter a valid email address')
+      return
+    }
+    setAddBusy(true)
+    setError(null)
+    const { data, error: rpcErr } = await supabase.rpc('set_email_access', {
+      p_email: email,
+      p_allowed: true,
+      p_note: newNote.trim(),
+    })
+    if (rpcErr) {
+      setError(rpcErr.message)
+      setAddBusy(false)
+      return
+    }
+    setAllowlistMessage(data as string)
+    setNewEmail('')
+    setNewNote('')
+    await loadAllowlist()
+    setAddBusy(false)
+  }
+
+  const removeEmail = async (entry: EmailAllowlistEntry) => {
+    setRemoveBusyId(entry.id)
+    setError(null)
+    const { data, error: rpcErr } = await supabase.rpc('set_email_access', {
+      p_email: entry.email,
+      p_allowed: false,
+    })
+    if (rpcErr) {
+      setError(rpcErr.message)
+      setRemoveBusyId(null)
+      return
+    }
+    setAllowlistMessage(data as string)
+    await loadAllowlist()
+    setRemoveBusyId(null)
   }
 
   return (
@@ -133,6 +200,87 @@ export default function Users() {
           setPendingRevoke(null)
         }}
         onCancel={() => setPendingRevoke(null)}
+      />
+
+      <h2 className="font-display text-lg font-bold pt-2">Allowed emails</h2>
+      <p className="text-sm text-ink-500">
+        Emails below may sign in even though they aren't @goabroad.com addresses.
+      </p>
+
+      {allowlistMessage && (
+        <span className="text-sm text-green-600 font-medium">{allowlistMessage}</span>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder="Email address"
+          className="grow rounded-md bg-surface-raised border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
+        />
+        <input
+          type="text"
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          placeholder="Note (optional)"
+          className="grow rounded-md bg-surface-raised border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
+        />
+        <button
+          onClick={addEmail}
+          disabled={addBusy || !isNewEmailValid}
+          className="shrink-0 text-sm bg-brand-700 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+        >
+          {addBusy ? 'Adding…' : 'Add'}
+        </button>
+      </div>
+
+      {allowlist.length === 0 ? (
+        <p className="text-sm text-ink-500">No allowed emails yet</p>
+      ) : (
+        <div className="space-y-2">
+          {allowlist.map((entry) => {
+            const busy = removeBusyId === entry.id
+            return (
+              <div key={entry.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
+                <div className="grow min-w-0">
+                  <p className="font-medium text-sm truncate flex items-center gap-1.5">
+                    <Mail className="size-3.5 text-ink-500 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+                    {entry.email}
+                  </p>
+                  {entry.note && <p className="text-xs text-ink-500 truncate">{entry.note}</p>}
+                </div>
+                <button
+                  onClick={() => setPendingRemove(entry)}
+                  disabled={busy}
+                  className="shrink-0 text-sm text-red-500 px-2 py-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
+                >
+                  {busy ? 'Working…' : 'Remove'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        destructive
+        title="Remove allowed email?"
+        message={
+          <>
+            Remove <b>{pendingRemove?.email}</b> from the allowlist? They will lose sign-in access,
+            but their account and order history are kept.
+          </>
+        }
+        confirmLabel="Remove"
+        busy={removeBusyId === pendingRemove?.id}
+        busyLabel="Removing…"
+        onConfirm={async () => {
+          if (pendingRemove) await removeEmail(pendingRemove)
+          setPendingRemove(null)
+        }}
+        onCancel={() => setPendingRemove(null)}
       />
     </div>
   )

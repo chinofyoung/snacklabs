@@ -32,7 +32,7 @@ export default function Login() {
             <GoogleIcon />
             Continue with Google
           </button>
-          <p className="text-xs text-center text-ink-400">goabroad.com accounts only</p>
+          <p className="text-xs text-center text-ink-400">goabroad.com accounts or invited emails only</p>
         </div>
       </div>
     </div>

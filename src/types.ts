@@ -73,6 +73,13 @@ export interface RestockSession {
   created_at: string
 }
 
+export interface EmailAllowlistEntry {
+  id: string
+  email: string
+  note: string
+  created_at: string
+}
+
 export interface CartLine {
   item: Item
   qty: number
