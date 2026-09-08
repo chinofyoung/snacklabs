@@ -23,7 +23,7 @@ export default function ItemCard({ item }: { item: Item }) {
       </div>
       <div className="p-3 flex flex-col gap-1 grow">
         <p className="font-medium text-sm leading-tight">{item.name}</p>
-        <p className="text-brand-600 font-bold tabular-nums">{formatPeso(item.price)}</p>
+        <p className="text-brand-700 font-bold tabular-nums">{formatPeso(item.price)}</p>
         {!out && (
           <p className={`text-xs ${item.stock <= item.low_stock_threshold ? 'text-amber-600 font-medium' : 'text-ink-500'}`}>
             {item.stock} left

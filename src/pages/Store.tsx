@@ -47,7 +47,7 @@ export default function Store() {
           </h1>
           <div className="flex items-center gap-4 text-sm">
             <Link to="/orders" className="text-ink-500 rounded-md">My orders</Link>
-            {profile?.is_admin && <Link to="/admin" className="text-brand-600 font-semibold rounded-md">Admin</Link>}
+            {profile?.is_admin && <Link to="/admin" className="text-brand-700 font-semibold rounded-md">Admin</Link>}
             <button onClick={signOut} className="text-ink-500 rounded-md">Sign out</button>
           </div>
         </div>
@@ -55,7 +55,7 @@ export default function Store() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search snacks…"
-          className="w-full rounded-xl bg-surface-raised px-4 py-2.5 text-sm shadow-card outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="w-full rounded-xl bg-surface-raised px-4 py-2.5 text-sm shadow-card outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
         />
         <div className="flex gap-2 overflow-x-auto pb-1">
           <Chip active={!category} onClick={() => setCategory(null)}>All</Chip>

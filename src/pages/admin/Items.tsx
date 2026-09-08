@@ -144,21 +144,21 @@ export default function Items() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setDraft({ ...EMPTY })}
-            className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium"
+            className="rounded-md bg-brand-700 text-white px-4 py-2 font-medium"
           >
             + Add item
           </button>
           <button
             onClick={() => fileRef.current?.click()}
             aria-label="Add item from photo"
-            className="rounded-md bg-brand-600 text-white p-2.5"
+            className="rounded-md bg-brand-700 text-white p-2.5"
           >
             <Camera className="size-5" strokeWidth={2.5} aria-hidden="true" />
           </button>
           <button
             onClick={() => navigate('/admin/restock')}
             aria-label="AI restock"
-            className="rounded-md bg-brand-600 text-white p-2.5"
+            className="rounded-md bg-brand-700 text-white p-2.5"
           >
             <CameraAiMark className="size-5" strokeWidth={2.5} />
           </button>
@@ -294,7 +294,7 @@ export default function Items() {
   )
 }
 
-const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500'
+const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700'
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">

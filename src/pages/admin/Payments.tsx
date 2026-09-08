@@ -85,7 +85,7 @@ export default function PaymentMethods() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-lg font-bold">Payment methods</h2>
-        <button onClick={() => setDraft({ ...EMPTY })} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium">
+        <button onClick={() => setDraft({ ...EMPTY })} className="rounded-md bg-brand-700 text-white px-4 py-2 font-medium">
           + Add
         </button>
       </div>
@@ -193,4 +193,4 @@ export default function PaymentMethods() {
   )
 }
 
-const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500'
+const inputCls = 'w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700'

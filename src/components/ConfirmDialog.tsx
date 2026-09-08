@@ -72,7 +72,7 @@ export default function ConfirmDialog({
               type="text"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
-              className="w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+              className="w-full rounded-md bg-surface border border-line px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
             />
           </div>
         )}

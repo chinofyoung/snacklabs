@@ -82,7 +82,7 @@ export default function ImageUploadField({
         <button
           type="button"
           onClick={openPicker}
-          className="w-full rounded-md border border-dashed border-line bg-surface px-3 py-4 flex items-center justify-center gap-2 text-sm text-ink-500 hover:border-brand-500 hover:text-brand-600 transition"
+          className="w-full rounded-md border border-dashed border-line bg-surface px-3 py-4 flex items-center justify-center gap-2 text-sm text-ink-500 hover:border-brand-500 hover:text-brand-700 transition"
         >
           <ImagePlus className="size-5" strokeWidth={2.5} aria-hidden="true" />
           Choose photo

@@ -128,7 +128,7 @@ export default function Orders() {
               <ReceiptText className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
               <p className="text-ink-700 font-medium">No orders yet</p>
               <p className="text-ink-500 text-sm">Orders you place will show up here.</p>
-              <Link to="/" className="inline-block text-brand-600 font-semibold mt-2 rounded-md">← Back to store</Link>
+              <Link to="/" className="inline-block text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
             </div>
           ) : (
             orders.map((o) => (

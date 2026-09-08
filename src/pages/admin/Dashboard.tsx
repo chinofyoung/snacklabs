@@ -48,7 +48,7 @@ export default function Dashboard() {
             Sales today
             <ChevronRight className="size-4 text-ink-500" strokeWidth={2.5} aria-hidden="true" />
           </p>
-          <p className="text-2xl font-black text-brand-600 tabular-nums">{formatPeso(todaySales)}</p>
+          <p className="text-2xl font-black text-brand-700 tabular-nums">{formatPeso(todaySales)}</p>
         </Link>
         <Link to="/admin/orders?filter=needs_review" className="rounded-lg bg-surface-raised p-5 shadow-card transition hover:shadow-none">
           <p className="text-sm text-ink-500 flex items-center justify-between">
@@ -61,7 +61,7 @@ export default function Dashboard() {
           <p className="text-sm text-ink-500 flex items-center gap-1">
             <Sparkles className="size-3.5" strokeWidth={2.5} aria-hidden="true" /> AI cost today
           </p>
-          <p className="text-2xl font-black text-brand-600 tabular-nums">{formatPeso(aiTodayPhp)}</p>
+          <p className="text-2xl font-black text-brand-700 tabular-nums">{formatPeso(aiTodayPhp)}</p>
           <p className="text-xs text-ink-500 mt-1">
             all-time {formatPeso(aiTotalPhp)} · {aiCount} calls · at ₱58.50 / $1
           </p>

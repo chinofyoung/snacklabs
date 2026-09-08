@@ -155,7 +155,7 @@ export default function Restock() {
             Snap a photo of the shelf or a new delivery.<br />
             Claude will count items and match them to your catalog.
           </p>
-          <button onClick={() => fileRef.current?.click()} className="rounded-lg bg-brand-600 text-white px-6 py-3.5 font-bold">
+          <button onClick={() => fileRef.current?.click()} className="rounded-lg bg-brand-700 text-white px-6 py-3.5 font-bold">
             Take / upload photo
           </button>
           {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
@@ -210,7 +210,7 @@ export default function Restock() {
                   value={l.matched_item_id ?? ''}
                   onChange={(e) => edit(i, { matched_item_id: e.target.value || null })}
                   aria-label={`Match ${l.name} to inventory item`}
-                  className="rounded-md bg-surface border border-line px-2 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+                  className="rounded-md bg-surface border border-line px-2 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
                 >
                   <option value="">+ Create as new item</option>
                   {catalog.map((c) => (
@@ -222,7 +222,7 @@ export default function Restock() {
                   <input
                     inputMode="numeric" value={l.qty}
                     onChange={(e) => edit(i, { qty: Number(e.target.value) || 0 })}
-                    className="w-14 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+                    className="w-14 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
                   />
                 </label>
                 {!matchedItem && (
@@ -231,7 +231,7 @@ export default function Restock() {
                     <input
                       inputMode="decimal" value={l.price}
                       onChange={(e) => edit(i, { price: e.target.value })}
-                      className="w-16 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+                      className="w-16 rounded-md bg-surface border border-line px-2 py-1 text-center outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
                     />
                   </label>
                 )}
@@ -267,7 +267,7 @@ export default function Restock() {
         <div className="rounded-xl bg-green-50 p-8 text-center space-y-3">
           <CircleCheck className="size-12 mx-auto text-green-700" strokeWidth={2.5} aria-hidden="true" />
           <p className="font-bold text-green-800">Inventory updated</p>
-          <button onClick={reset} className="text-brand-600 font-semibold rounded-md">Scan another photo</button>
+          <button onClick={reset} className="text-brand-700 font-semibold rounded-md">Scan another photo</button>
         </div>
       )}
     </div>

@@ -73,7 +73,7 @@ export default function AdminLayout() {
             end={n.end}
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 ${
-                isActive ? 'text-brand-600 font-bold' : 'text-ink-500'
+                isActive ? 'text-brand-700 font-bold' : 'text-ink-500'
               }`
             }
           >

@@ -67,7 +67,7 @@ export default function Cart() {
         <ShoppingBasket className="size-14 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
         <p className="text-ink-700 font-medium">Your cart is empty</p>
         <p className="text-ink-500 text-sm -mt-2">Add something from the shelf to get started.</p>
-        <Link to="/" className="text-brand-600 font-semibold mt-2 rounded-md">← Back to store</Link>
+        <Link to="/" className="text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
       </div>
     )
   }
@@ -89,7 +89,7 @@ export default function Cart() {
             </div>
             <div className="grow min-w-0">
               <p className="font-medium text-sm truncate">{item.name}</p>
-              <p className="text-brand-600 font-bold text-sm tabular-nums">{formatPeso(item.price)}</p>
+              <p className="text-brand-700 font-bold text-sm tabular-nums">{formatPeso(item.price)}</p>
             </div>
             <div className="flex items-center gap-1.5">
               <Stepper onClick={() => setLineQty(item.id, qty - 1)} label={`Decrease ${item.name} quantity`}>−</Stepper>
@@ -147,7 +147,7 @@ export default function Cart() {
       <button
         disabled={placing || !methodId}
         onClick={() => setConfirmingOrder(true)}
-        className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold text-lg disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
+        className="w-full rounded-lg bg-brand-700 text-white py-4 font-bold text-lg disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
       >
         {placing ? 'Placing order…' : `Pay ${formatPeso(total)}`}
       </button>

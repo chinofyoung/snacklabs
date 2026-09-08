@@ -64,7 +64,7 @@ export default function Users() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name or email"
-          className="w-full rounded-md bg-surface-raised border border-line pl-9 pr-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="w-full rounded-md bg-surface-raised border border-line pl-9 pr-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-brand-700"
         />
       </div>
 
@@ -92,7 +92,7 @@ export default function Users() {
                   <p className="text-xs text-ink-500 truncate">{u.email}</p>
                 </div>
                 {u.is_admin && (
-                  <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-600 text-[10px] font-medium px-2 py-1">
+                  <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[10px] font-medium px-2 py-1">
                     <ShieldCheck className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
                     Admin
                   </span>

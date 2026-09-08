@@ -111,7 +111,7 @@ export default function Settings() {
               <button
                 onClick={save}
                 disabled={saving}
-                className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium disabled:opacity-50"
+                className="rounded-md bg-brand-700 text-white px-4 py-2 font-medium disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>

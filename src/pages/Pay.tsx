@@ -48,7 +48,7 @@ export default function Pay() {
 
       <div className="rounded-lg bg-surface-raised p-6 shadow-card text-center space-y-4">
         <p className="text-ink-500 text-sm">Amount due</p>
-        <p className="text-4xl font-black text-brand-600 tabular-nums">{formatPeso(order.total)}</p>
+        <p className="text-4xl font-black text-brand-700 tabular-nums">{formatPeso(order.total)}</p>
         {method && method.type === 'cash' && (
           <>
             <Banknote className="size-16 mx-auto text-brand-600" strokeWidth={2} aria-hidden="true" />
@@ -179,7 +179,7 @@ function PaymentStatus({ order, method, onUpdated }: { order: Order; method: Pay
       <button
         disabled={phase !== 'idle'}
         onClick={() => fileRef.current?.click()}
-        className="w-full rounded-lg bg-brand-600 text-white py-4 font-bold disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
+        className="w-full rounded-lg bg-brand-700 text-white py-4 font-bold disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
       >
         {phase === 'idle' && (isCash ? "I've paid — upload photo proof" : "I've paid — upload screenshot")}
         {phase === 'uploading' && 'Uploading…'}
