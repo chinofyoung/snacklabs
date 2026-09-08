@@ -7,8 +7,16 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import { PERIODS, periodStart, periodLabel, type Period } from '../../lib/period'
 import type { Order, OrderStatus } from '../../types'
 
+interface OrderLineItemRow {
+  item_id: string
+  qty: number
+  price_at_purchase: number
+  items: { name: string } | null
+}
+
 interface OrderRow extends Order {
   profiles: { full_name: string; email: string } | null
+  order_items: OrderLineItemRow[]
 }
 
 const FILTERS: (OrderStatus | 'all')[] = ['needs_review', 'all', 'paid', 'verifying', 'awaiting_payment', 'cancelled']
@@ -35,12 +43,22 @@ export default function AdminOrders() {
 
   const loadPage = useCallback(async (p: number) => {
     let q = supabase.from('orders')
-      .select('*, profiles(full_name, email)')
+      .select('*, profiles(full_name, email), order_items(item_id, qty, price_at_purchase, items(name))')
       .order('created_at', { ascending: false })
       .range(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE - 1)
     if (filter !== 'all') q = q.eq('status', filter)
     if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
     const { data } = await q
+    // Unlike Sales.tsx's order_items query (which lists explicit columns and
+    // so gets a structurally-parsed result type from postgrest-js, with the
+    // nested order_items -> items to-one embed conservatively typed as an
+    // array - the "insufficiently overlapping" case that needs `as unknown`
+    // to cast through), this query's select string starts with `*`. That
+    // wildcard defeats postgrest-js's select-string type parsing entirely
+    // (confirmed empirically: assigning `data` here to a deliberately wrong
+    // type surfaces it as `any[] | null`, not a structural object type), so
+    // there is no structural mismatch to opt out of and a direct
+    // `as OrderRow[]` cast is both sufficient and accurate.
     const rows = (data as OrderRow[]) ?? []
     setOrders((prev) => (p === 0 ? rows : [...prev, ...rows]))
     setHasMore(rows.length === PAGE_SIZE)
@@ -188,6 +206,26 @@ export default function AdminOrders() {
 
             {open === o.id && (
               <div className="border-t border-line p-3 space-y-3">
+                {o.order_items && o.order_items.length > 0 ? (
+                  <div className="rounded-md bg-surface p-3 text-sm space-y-1">
+                    {o.order_items.map((li) => (
+                      <div key={li.item_id} className="flex items-center gap-2">
+                        <p className="min-w-0 flex-1 truncate">{li.qty} x {li.items?.name ?? 'Unknown item'}</p>
+                        <p className="tabular-nums text-right">{formatPeso(li.qty * li.price_at_purchase)}</p>
+                      </div>
+                    ))}
+                    {(() => {
+                      const lineTotal = o.order_items.reduce((sum, li) => sum + li.qty * li.price_at_purchase, 0)
+                      return Math.abs(lineTotal - o.total) > 0.01 && (
+                        <p className="text-xs text-ink-500">
+                          Line items total {formatPeso(lineTotal)}, order total is {formatPeso(o.total)}
+                        </p>
+                      )
+                    })()}
+                  </div>
+                ) : (
+                  <p className="text-xs text-ink-500">No line items recorded for this order.</p>
+                )}
                 {o.ai_verdict && (
                   <div className="rounded-md bg-surface p-3 text-sm space-y-1">
                     <p><b>AI verdict:</b> {o.ai_verdict.verdict}</p>
