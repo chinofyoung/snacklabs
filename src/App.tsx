@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router'
 import Login from './pages/Login'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 import Store from './pages/Store'
 import Cart from './pages/Cart'
 import Pay from './pages/Pay'
@@ -18,6 +20,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/" element={<RequireAuth><Store /></RequireAuth>} />
       <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
       <Route path="/pay/:orderId" element={<RequireAuth><Pay /></RequireAuth>} />

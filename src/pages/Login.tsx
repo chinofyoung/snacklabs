@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
@@ -33,6 +34,14 @@ export default function Login() {
             Continue with Google
           </button>
           <p className="text-xs text-center text-ink-400">goabroad.com accounts or invited emails only</p>
+          <p className="text-xs text-center text-ink-400 flex items-center justify-center gap-3">
+            <Link to="/privacy" className="underline underline-offset-2 hover:text-white transition-colors">
+              Privacy Policy
+            </Link>
+            <Link to="/terms" className="underline underline-offset-2 hover:text-white transition-colors">
+              Terms of Service
+            </Link>
+          </p>
         </div>
       </div>
     </div>
