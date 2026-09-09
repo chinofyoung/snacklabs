@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReceiptText } from 'lucide-react'
+import { Link } from 'react-router'
+import { ChevronRight, ReceiptText, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import { bucketIndexFor, bucketsFor, rangeFor, type RangePreset } from '../../lib/salesRange'
@@ -280,6 +281,18 @@ export default function Sales() {
             <h2 className="text-sm font-semibold text-ink-700">Top items</h2>
             <TopItemsChart items={topItems} />
           </section>
+
+          <Link
+            to="/admin/sales/people"
+            className="flex items-center gap-3 rounded-lg bg-surface-raised p-5 shadow-card"
+          >
+            <Users className="size-6 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
+            <div className="grow">
+              <p className="font-medium text-ink-900">Sales per person</p>
+              <p className="text-sm text-ink-500">Rank buyers by total purchase</p>
+            </div>
+            <ChevronRight className="size-5 text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+          </Link>
         </>
       )}
     </div>

@@ -9,6 +9,7 @@ import Orders from './pages/Orders'
 import AdminLayout from './pages/admin/AdminLayout'
 import Dashboard from './pages/admin/Dashboard'
 import Sales from './pages/admin/Sales'
+import SalesPeople from './pages/admin/SalesPeople'
 import Items from './pages/admin/Items'
 import Users from './pages/admin/Users'
 import Settings from './pages/admin/Settings'
@@ -29,6 +30,7 @@ export default function App() {
       <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
         <Route index element={<Dashboard />} />
         <Route path="sales" element={<Sales />} />
+        <Route path="sales/people" element={<SalesPeople />} />
         <Route path="items" element={<Items />} />
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
