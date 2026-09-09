@@ -67,7 +67,7 @@ export default function Cart() {
         <ShoppingBasket className="size-14 text-brand-600" strokeWidth={2.5} aria-hidden="true" />
         <p className="text-ink-700 font-medium">Your cart is empty</p>
         <p className="text-ink-500 text-sm -mt-2">Add something from the shelf to get started.</p>
-        <Link to="/" className="text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
+        <Link to="/store" className="text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
       </div>
     )
   }
@@ -75,7 +75,7 @@ export default function Cart() {
   return (
     <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-6 app-frame">
       <header className="flex items-center gap-3">
-        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <Link to="/store" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
         <h1 className="font-display text-xl font-bold">Your cart</h1>
       </header>
 

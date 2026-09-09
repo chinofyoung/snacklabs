@@ -5,10 +5,15 @@ import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import type { Item, Order } from '../../types'
 
+const PAGE_SIZE = 5
+
 export default function Dashboard() {
   const [todaySales, setTodaySales] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
   const [lowStock, setLowStock] = useState<Item[]>([])
+  // lowStock is fetched once on mount (see effect below), so PAGE_SIZE as the
+  // initial value is always the right starting point — no reset effect needed.
+  const [lowStockVisible, setLowStockVisible] = useState(PAGE_SIZE)
   const [aiTodayPhp, setAiTodayPhp] = useState(0)
   const [aiTotalPhp, setAiTotalPhp] = useState(0)
   const [aiCount, setAiCount] = useState(0)
@@ -74,12 +79,22 @@ export default function Dashboard() {
             All stocked up <PartyPopper className="size-4" strokeWidth={2.5} aria-hidden="true" />
           </p>
         ) : (
-          lowStock.map((i) => (
-            <div key={i.id} className="rounded-md bg-surface-raised p-3 shadow-card flex justify-between text-sm">
-              <span>{i.name}</span>
-              <span className="font-bold text-amber-600 tabular-nums">{i.stock} left</span>
-            </div>
-          ))
+          <>
+            {lowStock.slice(0, lowStockVisible).map((i) => (
+              <div key={i.id} className="rounded-md bg-surface-raised p-3 shadow-card flex justify-between text-sm">
+                <span>{i.name}</span>
+                <span className="font-bold text-amber-600 tabular-nums">{i.stock} left</span>
+              </div>
+            ))}
+            {lowStock.length > lowStockVisible && (
+              <button
+                onClick={() => setLowStockVisible((c) => c + PAGE_SIZE)}
+                className="w-full rounded-2xl bg-white shadow-sm py-3.5 font-medium text-ink-900 active:scale-[0.98] transition"
+              >
+                Show {Math.min(PAGE_SIZE, lowStock.length - lowStockVisible)} more
+              </button>
+            )}
+          </>
         )}
       </section>
     </div>

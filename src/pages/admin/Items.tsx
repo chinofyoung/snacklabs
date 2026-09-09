@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Camera, CupSoda, LayoutGrid, List, ShoppingBasket, X } from 'lucide-react'
+import { Camera, CupSoda, LayoutGrid, List, ShoppingBasket, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import { compressImage } from '../../lib/image'
@@ -196,58 +196,64 @@ export default function Items() {
         </div>
       ) : view === 'list' ? (
         <div className="space-y-2">
-          {items.map((i) => (
-            <div key={i.id} className="rounded-lg bg-surface-raised p-3 shadow-card flex items-center gap-3">
-              <div className="size-12 rounded-md bg-brand-50 overflow-hidden flex items-center justify-center shrink-0">
-                {i.image_url ? <img src={i.image_url} alt="" className="w-full h-full object-cover" /> : <ShoppingBasket className="size-6 text-brand-600/40" strokeWidth={2.5} aria-hidden="true" />}
+          {items.map((i) => {
+            const out = i.stock === 0
+            return (
+              <div key={i.id} className={`rounded-lg p-3 flex items-center gap-3 ${out ? 'bg-surface ring-1 ring-line' : 'bg-surface-raised shadow-card'}`}>
+                <div className={`size-12 rounded-md overflow-hidden flex items-center justify-center shrink-0 ${out ? 'bg-line' : 'bg-brand-50'}`}>
+                  {i.image_url ? <img src={i.image_url} alt="" className={`w-full h-full object-cover ${out ? 'grayscale opacity-60' : ''}`} /> : <ShoppingBasket className={`size-6 ${out ? 'text-ink-400' : 'text-brand-600/40'}`} strokeWidth={2.5} aria-hidden="true" />}
+                </div>
+                <div className="grow min-w-0">
+                  <p className={`font-medium text-sm truncate ${out ? 'text-ink-500' : ''}`}>{i.name}</p>
+                  <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
+                  <span className={`w-8 text-center font-bold text-sm tabular-nums ${out ? 'text-red-600' : i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
+                    {i.stock}
+                  </span>
+                  <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
+                </div>
+                <button
+                  onClick={() => openEditDraft(i)}
+                  className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+                >
+                  Edit
+                </button>
+                <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
               </div>
-              <div className="grow min-w-0">
-                <p className="font-medium text-sm truncate">{i.name}</p>
-                <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
-                <span className={`w-8 text-center font-bold text-sm tabular-nums ${i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
-                  {i.stock}
-                </span>
-                <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
-              </div>
-              <button
-                onClick={() => openEditDraft(i)}
-                className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
-              >
-                Edit
-              </button>
-              <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><X className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {items.map((i) => (
-            <div key={i.id} className="rounded-lg bg-surface-raised shadow-card overflow-hidden flex flex-col">
-              <div className="aspect-square bg-brand-50 flex items-center justify-center overflow-hidden">
-                {i.image_url ? <img src={i.image_url} alt="" className="w-full h-full object-cover" /> : <ShoppingBasket className="size-8 text-brand-600/40" strokeWidth={2.5} aria-hidden="true" />}
-              </div>
-              <div className="p-3 space-y-2 grow flex flex-col">
-                <p className="font-medium text-sm line-clamp-2">{i.name}</p>
-                <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
-                <div className="mt-auto space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
-                    <span className={`w-8 text-center font-bold text-sm tabular-nums ${i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
-                      {i.stock}
-                    </span>
-                    <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <button onClick={() => openEditDraft(i)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">Edit</button>
-                    <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><X className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
+          {items.map((i) => {
+            const out = i.stock === 0
+            return (
+              <div key={i.id} className={`rounded-lg overflow-hidden flex flex-col ${out ? 'bg-surface ring-1 ring-line' : 'bg-surface-raised shadow-card'}`}>
+                <div className={`aspect-square flex items-center justify-center overflow-hidden ${out ? 'bg-line' : 'bg-brand-50'}`}>
+                  {i.image_url ? <img src={i.image_url} alt="" className={`w-full h-full object-cover ${out ? 'grayscale opacity-60' : ''}`} /> : <ShoppingBasket className={`size-8 ${out ? 'text-ink-400' : 'text-brand-600/40'}`} strokeWidth={2.5} aria-hidden="true" />}
+                </div>
+                <div className="p-3 space-y-2 grow flex flex-col">
+                  <p className={`font-medium text-sm line-clamp-2 ${out ? 'text-ink-500' : ''}`}>{i.name}</p>
+                  <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
+                  <div className="mt-auto space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
+                      <span className={`w-8 text-center font-bold text-sm tabular-nums ${out ? 'text-red-600' : i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
+                        {i.stock}
+                      </span>
+                      <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <button onClick={() => openEditDraft(i)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">Edit</button>
+                      <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

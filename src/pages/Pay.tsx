@@ -30,7 +30,7 @@ export default function Pay() {
   useEffect(() => {
     if (order?.status !== 'paid') return
     if (countdown <= 0) {
-      navigate('/')
+      navigate('/store')
       return
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
@@ -42,7 +42,7 @@ export default function Pay() {
   return (
     <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5 app-frame">
       <header className="flex items-center gap-3">
-        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <Link to="/store" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
         <h1 className="font-display text-xl font-bold">Scan & pay</h1>
       </header>
 
@@ -76,7 +76,7 @@ export default function Pay() {
 
       {['paid', 'needs_review', 'cancelled'].includes(order.status) && (
         <Link
-          to="/"
+          to="/store"
           className="block w-full text-center rounded-2xl bg-ink-900 text-white py-4 font-bold active:scale-[0.98] transition"
         >
           Back to store

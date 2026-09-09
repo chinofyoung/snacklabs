@@ -15,7 +15,7 @@ import Users from './pages/admin/Users'
 import Settings from './pages/admin/Settings'
 import AdminOrders from './pages/admin/AdminOrders'
 import Restock from './pages/admin/Restock'
-import { RequireAuth, RequireAdmin } from './components/guards'
+import { RequireAuth, RequireAdmin, HomeRedirect } from './components/guards'
 
 export default function App() {
   return (
@@ -23,7 +23,8 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
-      <Route path="/" element={<RequireAuth><Store /></RequireAuth>} />
+      <Route path="/" element={<HomeRedirect />} />
+      <Route path="/store" element={<RequireAuth><Store /></RequireAuth>} />
       <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
       <Route path="/pay/:orderId" element={<RequireAuth><Pay /></RequireAuth>} />
       <Route path="/orders" element={<RequireAuth><Orders /></RequireAuth>} />

@@ -91,7 +91,7 @@ export default function Orders() {
   return (
     <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-4 app-frame">
       <header className="flex items-center gap-3">
-        <Link to="/" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+        <Link to="/store" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
         <h1 className="font-display text-xl font-bold">My orders</h1>
       </header>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -128,7 +128,7 @@ export default function Orders() {
               <ReceiptText className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
               <p className="text-ink-700 font-medium">No orders yet</p>
               <p className="text-ink-500 text-sm">Orders you place will show up here.</p>
-              <Link to="/" className="inline-block text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
+              <Link to="/store" className="inline-block text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
             </div>
           ) : (
             orders.map((o) => (

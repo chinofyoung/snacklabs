@@ -32,6 +32,15 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   const { session, profile, loading } = useAuth()
   if (loading) return <Splash />
   if (!session) return <Navigate to="/login" replace />
-  if (!profile?.is_admin) return <Navigate to="/" replace />
+  if (!profile?.is_admin) return <Navigate to="/store" replace />
   return <>{children}</>
+}
+
+// Landing hub for "/": once auth resolves, sends admins to the admin
+// console and everyone else to the storefront.
+export function HomeRedirect() {
+  const { session, profile, loading } = useAuth()
+  if (loading) return <Splash />
+  if (!session) return <Navigate to="/login" replace />
+  return <Navigate to={profile?.is_admin ? '/admin' : '/store'} replace />
 }
