@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ChevronRight, PartyPopper, Sparkles } from 'lucide-react'
+import { ChevronRight, PartyPopper, Sparkles, TrendingUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
+import { projectedSales, remainingUnits } from '../../lib/inventory'
 import type { Item, Order } from '../../types'
 
 const PAGE_SIZE = 5
@@ -10,9 +11,10 @@ const PAGE_SIZE = 5
 export default function Dashboard() {
   const [todaySales, setTodaySales] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
-  const [lowStock, setLowStock] = useState<Item[]>([])
-  // lowStock is fetched once on mount (see effect below), so PAGE_SIZE as the
-  // initial value is always the right starting point — no reset effect needed.
+  const [items, setItems] = useState<Item[]>([])
+  // items is fetched once on mount (see effect below), and lowStock below is
+  // derived from items on every render, so PAGE_SIZE as the initial value is
+  // always the right starting point — no reset effect needed.
   const [lowStockVisible, setLowStockVisible] = useState(PAGE_SIZE)
   const [aiTodayPhp, setAiTodayPhp] = useState(0)
   const [aiTotalPhp, setAiTotalPhp] = useState(0)
@@ -32,8 +34,7 @@ export default function Dashboard() {
       .then(({ count }) => setReviewCount(count ?? 0))
 
     supabase.from('items').select('*').eq('is_active', true)
-      .then(({ data }) =>
-        setLowStock(((data as Item[]) ?? []).filter((i) => i.stock <= i.low_stock_threshold)))
+      .then(({ data }) => setItems((data as Item[]) ?? []))
 
     supabase.from('ai_usage').select('cost_php, created_at')
       .then(({ data }) => {
@@ -43,6 +44,10 @@ export default function Dashboard() {
         setAiCount(rows.length)
       })
   }, [])
+
+  const lowStock = items.filter((i) => i.stock <= i.low_stock_threshold)
+  const projectedSalesTotal = projectedSales(items)
+  const remainingStock = remainingUnits(items)
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-3xl">
@@ -61,6 +66,15 @@ export default function Dashboard() {
             <ChevronRight className="size-4 text-ink-500" strokeWidth={2.5} aria-hidden="true" />
           </p>
           <p className={`text-2xl font-black tabular-nums ${reviewCount > 0 ? 'text-amber-600' : 'text-ink-900'}`}>{reviewCount}</p>
+        </Link>
+        <Link to="/admin/items" className="rounded-lg bg-surface-raised p-5 shadow-card col-span-2 transition hover:shadow-none">
+          <p className="text-sm text-ink-500 flex items-center gap-1">
+            <TrendingUp className="size-3.5" strokeWidth={2.5} aria-hidden="true" /> Projected sales
+          </p>
+          <p className="text-2xl font-black text-brand-700 tabular-nums">{formatPeso(projectedSalesTotal)}</p>
+          <p className="text-xs text-ink-500 mt-1">
+            if all {remainingStock.toLocaleString()} unit{remainingStock === 1 ? '' : 's'} of remaining stock sell
+          </p>
         </Link>
         <div className="rounded-lg bg-surface-raised p-5 shadow-card col-span-2">
           <p className="text-sm text-ink-500 flex items-center gap-1">
