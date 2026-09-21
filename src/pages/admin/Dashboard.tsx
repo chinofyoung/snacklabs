@@ -68,8 +68,11 @@ export default function Dashboard() {
           <p className={`text-2xl font-black tabular-nums ${reviewCount > 0 ? 'text-amber-600' : 'text-ink-900'}`}>{reviewCount}</p>
         </Link>
         <Link to="/admin/items" className="rounded-lg bg-surface-raised p-5 shadow-card col-span-2 transition hover:shadow-none">
-          <p className="text-sm text-ink-500 flex items-center gap-1">
-            <TrendingUp className="size-3.5" strokeWidth={2.5} aria-hidden="true" /> Projected sales
+          <p className="text-sm text-ink-500 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <TrendingUp className="size-3.5" strokeWidth={2.5} aria-hidden="true" /> Projected sales
+            </span>
+            <ChevronRight className="size-4 text-ink-500" strokeWidth={2.5} aria-hidden="true" />
           </p>
           <p className="text-2xl font-black text-brand-700 tabular-nums">{formatPeso(projectedSalesTotal)}</p>
           <p className="text-xs text-ink-500 mt-1">
