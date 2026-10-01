@@ -4,6 +4,7 @@ import { Camera, CupSoda, LayoutGrid, List, ShoppingBasket, Trash2 } from 'lucid
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import { compressImage } from '../../lib/image'
+import { groupFromSnapshot, outOfStockIds, snapshotGroups } from '../../lib/inventory'
 import type { Item } from '../../types'
 import ImageUploadField from '../../components/ImageUploadField'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -29,6 +30,13 @@ export default function Items() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Item[]>([])
+  const [groupAtLoad, setGroupAtLoad] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  // `loaded` flips once a read has succeeded; `loadError` is true while the latest
+  // read has failed. An empty `items` is only believed as "No items yet" when the
+  // first has happened and the second has not. Otherwise it is "not yet" or "could
+  // not load", and saying "No items yet" would read as an empty shelf.
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,9 +55,22 @@ export default function Items() {
     localStorage.setItem(VIEW_STORAGE_KEY, view)
   }, [view])
 
+  // Every full refetch (mount, save, remove, failed stock update) re-snapshots the
+  // groups from the fresh rows, never from previous state. A failed read changes
+  // nothing on screen but the banner: `items` and the snapshot are kept as they were.
   const load = () =>
     supabase.from('items').select('*').eq('is_active', true).order('name')
-      .then(({ data }) => setItems((data as Item[]) ?? []))
+      .then(({ data, error: readErr }) => {
+        if (readErr || !data) {
+          setLoadError(true)
+          return
+        }
+        const rows = data as Item[]
+        setItems(rows)
+        setGroupAtLoad(snapshotGroups(rows))
+        setLoaded(true)
+        setLoadError(false)
+      })
 
   useEffect(() => { load() }, [])
 
@@ -129,6 +150,67 @@ export default function Items() {
     await load()
   }
 
+  // Live view of who is out of stock right now. Used for the count's colour and as
+  // the fallback placement for an item the load-time snapshot has not seen.
+  const liveOutIds = outOfStockIds(items)
+  const { inStock, outOfStock } = groupFromSnapshot(items, groupAtLoad)
+
+  // `out` is handed in by the group being rendered and drives the row's background,
+  // greyscale and text: it is the frozen group, not live stock, so a section always
+  // reads coherently. The count's red is the exception on purpose -- it follows live
+  // stock (via liveOutIds, i.e. outOfStockIds, so "out" has one definition), which
+  // turns a just-emptied item red while it still sits in the in-stock group.
+  const renderListRow = (i: Item, out: boolean) => (
+    <div key={i.id} className={`rounded-lg p-3 flex items-center gap-3 ${out ? 'bg-surface ring-1 ring-line' : 'bg-surface-raised shadow-card'}`}>
+      <div className={`size-12 rounded-md overflow-hidden flex items-center justify-center shrink-0 ${out ? 'bg-line' : 'bg-brand-50'}`}>
+        {i.image_url ? <img src={i.image_url} alt="" className={`w-full h-full object-cover ${out ? 'grayscale opacity-60' : ''}`} /> : <ShoppingBasket className={`size-6 ${out ? 'text-ink-400' : 'text-brand-600/40'}`} strokeWidth={2.5} aria-hidden="true" />}
+      </div>
+      <div className="grow min-w-0">
+        <p className={`font-medium text-sm truncate ${out ? 'text-ink-500' : ''}`}>{i.name}</p>
+        <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
+        <span className={`w-8 text-center font-bold text-sm tabular-nums ${liveOutIds.has(i.id) ? 'text-red-600' : i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
+          {i.stock}
+        </span>
+        <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
+      </div>
+      <button
+        onClick={() => openEditDraft(i)}
+        className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+      >
+        Edit
+      </button>
+      <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
+    </div>
+  )
+
+  const renderGridCard = (i: Item, out: boolean) => (
+    <div key={i.id} className={`rounded-lg overflow-hidden flex flex-col ${out ? 'bg-surface ring-1 ring-line' : 'bg-surface-raised shadow-card'}`}>
+      <div className={`aspect-square flex items-center justify-center overflow-hidden ${out ? 'bg-line' : 'bg-brand-50'}`}>
+        {i.image_url ? <img src={i.image_url} alt="" className={`w-full h-full object-cover ${out ? 'grayscale opacity-60' : ''}`} /> : <ShoppingBasket className={`size-8 ${out ? 'text-ink-400' : 'text-brand-600/40'}`} strokeWidth={2.5} aria-hidden="true" />}
+      </div>
+      <div className="p-3 space-y-2 grow flex flex-col">
+        <p className={`font-medium text-sm line-clamp-2 ${out ? 'text-ink-500' : ''}`}>{i.name}</p>
+        <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
+        <div className="mt-auto space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
+            <span className={`w-8 text-center font-bold text-sm tabular-nums ${liveOutIds.has(i.id) ? 'text-red-600' : i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
+              {i.stock}
+            </span>
+            <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={() => openEditDraft(i)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">Edit</button>
+            <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="p-4 md:p-8 space-y-4 max-w-3xl">
       <input
@@ -139,8 +221,9 @@ export default function Items() {
           e.target.value = ''
         }}
       />
+      <h1 className="font-display text-2xl font-bold">Items</h1>
+
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="font-display text-2xl font-bold">Items</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setDraft({ ...EMPTY })}
@@ -163,10 +246,9 @@ export default function Items() {
             <CameraAiMark className="size-5" strokeWidth={2.5} />
           </button>
         </div>
-      </div>
 
-      <div className="flex justify-end">
-        <div className="rounded-full bg-surface-raised shadow-card p-1 flex gap-1">
+        {/* ml-auto keeps the toggle right-aligned when the row wraps at narrow widths. */}
+        <div className="ml-auto rounded-full bg-surface-raised shadow-card p-1 flex gap-1">
           <button
             onClick={() => setView('list')}
             aria-label="List view"
@@ -188,72 +270,60 @@ export default function Items() {
 
       {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
 
-      {items.length === 0 ? (
-        <div className="text-center py-12 space-y-2">
-          <CupSoda className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
-          <p className="text-ink-700 font-medium">No items yet</p>
-          <p className="text-ink-500 text-sm">Add your first snack to stock the shelf.</p>
+      {loadError && (
+        <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 flex items-center justify-between gap-3" role="alert">
+          <p>
+            {loaded
+              ? 'Could not refresh the list — what is shown may be out of date.'
+              : 'Could not load items — check your connection.'}
+          </p>
+          <button onClick={() => { void load() }} className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-red-600 shadow-card">
+            Retry
+          </button>
         </div>
+      )}
+
+      {items.length === 0 ? (
+        !loadError && (loaded ? (
+          <div className="text-center py-12 space-y-2">
+            <CupSoda className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+            <p className="text-ink-700 font-medium">No items yet</p>
+            <p className="text-ink-500 text-sm">Add your first snack to stock the shelf.</p>
+          </div>
+        ) : (
+          <p className="text-center text-ink-500 py-8">Loading…</p>
+        ))
       ) : view === 'list' ? (
-        <div className="space-y-2">
-          {items.map((i) => {
-            const out = i.stock === 0
-            return (
-              <div key={i.id} className={`rounded-lg p-3 flex items-center gap-3 ${out ? 'bg-surface ring-1 ring-line' : 'bg-surface-raised shadow-card'}`}>
-                <div className={`size-12 rounded-md overflow-hidden flex items-center justify-center shrink-0 ${out ? 'bg-line' : 'bg-brand-50'}`}>
-                  {i.image_url ? <img src={i.image_url} alt="" className={`w-full h-full object-cover ${out ? 'grayscale opacity-60' : ''}`} /> : <ShoppingBasket className={`size-6 ${out ? 'text-ink-400' : 'text-brand-600/40'}`} strokeWidth={2.5} aria-hidden="true" />}
-                </div>
-                <div className="grow min-w-0">
-                  <p className={`font-medium text-sm truncate ${out ? 'text-ink-500' : ''}`}>{i.name}</p>
-                  <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
-                  <span className={`w-8 text-center font-bold text-sm tabular-nums ${out ? 'text-red-600' : i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
-                    {i.stock}
-                  </span>
-                  <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
-                </div>
-                <button
-                  onClick={() => openEditDraft(i)}
-                  className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
-                >
-                  Edit
-                </button>
-                <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
+        <div>
+          {inStock.length > 0 && (
+            <div className="space-y-2">
+              {inStock.map((i) => renderListRow(i, false))}
+            </div>
+          )}
+          {outOfStock.length > 0 && (
+            <>
+              <h2 className="font-semibold text-sm text-ink-700 pt-6 pb-3">Out of stock</h2>
+              <div className="space-y-2">
+                {outOfStock.map((i) => renderListRow(i, true))}
               </div>
-            )
-          })}
+            </>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {items.map((i) => {
-            const out = i.stock === 0
-            return (
-              <div key={i.id} className={`rounded-lg overflow-hidden flex flex-col ${out ? 'bg-surface ring-1 ring-line' : 'bg-surface-raised shadow-card'}`}>
-                <div className={`aspect-square flex items-center justify-center overflow-hidden ${out ? 'bg-line' : 'bg-brand-50'}`}>
-                  {i.image_url ? <img src={i.image_url} alt="" className={`w-full h-full object-cover ${out ? 'grayscale opacity-60' : ''}`} /> : <ShoppingBasket className={`size-8 ${out ? 'text-ink-400' : 'text-brand-600/40'}`} strokeWidth={2.5} aria-hidden="true" />}
-                </div>
-                <div className="p-3 space-y-2 grow flex flex-col">
-                  <p className={`font-medium text-sm line-clamp-2 ${out ? 'text-ink-500' : ''}`}>{i.name}</p>
-                  <p className="text-xs text-ink-500">{formatPeso(i.price)} · {i.category}</p>
-                  <div className="mt-auto space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <button onClick={() => adjustStock(i, -1)} aria-label={`Decrease ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">−</button>
-                      <span className={`w-8 text-center font-bold text-sm tabular-nums ${out ? 'text-red-600' : i.stock <= i.low_stock_threshold ? 'text-amber-600' : ''}`}>
-                        {i.stock}
-                      </span>
-                      <button onClick={() => adjustStock(i, 1)} aria-label={`Increase ${i.name} stock`} className="size-8 rounded-full bg-ink-900/5 font-bold">+</button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <button onClick={() => openEditDraft(i)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">Edit</button>
-                      <button onClick={() => setPendingDelete(i)} aria-label={`Remove ${i.name}`} className="text-red-500 px-1.5 py-1 rounded-md"><Trash2 className="size-4" strokeWidth={2.5} aria-hidden="true" /></button>
-                    </div>
-                  </div>
-                </div>
+        <div>
+          {inStock.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {inStock.map((i) => renderGridCard(i, false))}
+            </div>
+          )}
+          {outOfStock.length > 0 && (
+            <>
+              <h2 className="font-semibold text-sm text-ink-700 pt-6 pb-3">Out of stock</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {outOfStock.map((i) => renderGridCard(i, true))}
               </div>
-            )
-          })}
+            </>
+          )}
         </div>
       )}
 
