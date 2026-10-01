@@ -37,7 +37,7 @@ export default function Store() {
   const { inStock, outOfStock } = partitionByStock(visible)
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh pb-44 app-frame">
+    <div className="max-w-md mx-auto pb-44 app-frame">
       <header className="sticky top-0 z-10 bg-surface/90 backdrop-blur px-4 pt-4 pb-3 space-y-3 border-b border-line">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-xl font-extrabold flex items-center gap-1.5">

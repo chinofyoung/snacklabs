@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { ArrowLeft, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users, Wallet } from 'lucide-react'
+import { CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import CookieMark from '../../components/CookieMark'
 
@@ -8,8 +8,10 @@ interface NavItem {
   label: string
   icon: LucideIcon
   end: boolean
-  // Keeps a section out of the space-constrained mobile bottom bar
-  // (already at its width budget) while still showing it in the desktop sidebar.
+  // Keeps a section out of the mobile bottom bar while still showing it in the
+  // desktop sidebar. The bar was at its width budget; dropping its Store tab (the
+  // header's Visit store link replaced it) freed one slot, which is deliberately
+  // left empty. Top-ups stays hidden: admins reach it from the Dashboard tile.
   mobileHidden?: boolean
 }
 
@@ -46,31 +48,28 @@ export default function AdminLayout() {
             {n.label}
           </NavLink>
         ))}
-        <Link
-          to="/store"
-          className="mt-auto rounded-md px-3 py-2.5 text-sm font-medium transition flex items-center gap-2 text-ink-500 hover:bg-ink-900/5"
-        >
-          <ArrowLeft className="size-6" strokeWidth={2.5} aria-hidden="true" />
-          Back to store
-        </Link>
       </aside>
 
-      {/* min-w-0: as a flex item, main otherwise refuses to shrink below the
-          min-content width of its page, so one long nowrap/truncated line (a
+      {/* min-w-0: as a flex item, this column otherwise refuses to shrink below
+          the min-content width of its page, so one long nowrap/truncated line (a
           requester's email on Top-ups) pushes the whole page past the viewport
           next to the sidebar. */}
-      <main className="grow min-w-0 pb-24 md:pb-8">
-        <Outlet />
-      </main>
+      <div className="grow min-w-0 flex flex-col">
+        <header className="border-b border-line bg-surface-raised px-2 md:px-6 flex justify-end">
+          <Link
+            to="/store"
+            className="min-h-11 px-2 inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-ink-700"
+          >
+            <Store className="size-5" strokeWidth={2.5} aria-hidden="true" />
+            Visit store
+          </Link>
+        </header>
+        <main className="grow pb-24 md:pb-8">
+          <Outlet />
+        </main>
+      </div>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface-raised border-t border-line flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        <Link
-          to="/store"
-          className="flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 text-ink-500"
-        >
-          <Store className="size-6" strokeWidth={2.5} aria-hidden="true" />
-          Store
-        </Link>
         {NAV.filter((n) => !n.mobileHidden).map((n) => (
           <NavLink
             key={n.to}

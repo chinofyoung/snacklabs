@@ -111,7 +111,7 @@ export default function Orders() {
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-4 app-frame pb-28">
+    <div className="max-w-md mx-auto px-4 py-4 space-y-4 app-frame pb-28">
       <header>
         <h1 className="font-display text-xl font-bold">My orders</h1>
       </header>

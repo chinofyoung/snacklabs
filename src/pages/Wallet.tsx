@@ -187,7 +187,7 @@ export default function Wallet() {
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5 pb-28 app-frame">
+    <div className="max-w-md mx-auto px-4 py-4 space-y-5 pb-28 app-frame">
       <header>
         <h1 className="font-display text-xl font-bold">Wallet</h1>
       </header>
