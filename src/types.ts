@@ -12,7 +12,7 @@ export interface Item {
 export interface PaymentMethod {
   id: string
   label: string
-  type: 'ewallet' | 'bank' | 'cash'
+  type: 'ewallet' | 'bank' | 'cash' | 'wallet'
   qr_image_url: string | null
   account_name: string
   account_number: string
@@ -83,4 +83,38 @@ export interface EmailAllowlistEntry {
 export interface CartLine {
   item: Item
   qty: number
+}
+
+export interface Wallet {
+  user_id: string
+  balance: number
+  updated_at: string
+}
+
+export type WalletEntryKind = 'topup' | 'purchase' | 'refund'
+
+export interface WalletEntry {
+  id: string
+  user_id: string
+  amount: number
+  kind: WalletEntryKind
+  order_id: string | null
+  topup_id: string | null
+  note: string
+  created_at: string
+}
+
+export type TopupStatus = 'pending' | 'approved' | 'rejected'
+
+export interface TopupRequest {
+  id: string
+  user_id: string
+  amount: number
+  payment_method_id: string | null
+  proof_path: string
+  status: TopupStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
+  reject_reason: string
+  created_at: string
 }

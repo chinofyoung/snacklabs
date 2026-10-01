@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { projectedSales, remainingUnits } from './inventory'
+import { partitionByStock, projectedSales, remainingUnits } from './inventory'
 
 describe('projectedSales', () => {
   it('returns 0 for an empty array', () => {
@@ -86,5 +86,56 @@ describe('remainingUnits', () => {
     const before = JSON.parse(JSON.stringify(items))
     remainingUnits(items)
     expect(items).toEqual(before)
+  })
+})
+
+describe('partitionByStock', () => {
+  const item = (name: string, stock: number) =>
+    ({ id: name, name, price: 10, stock, image_url: null, category: 'snacks',
+       low_stock_threshold: 2, is_active: true })
+
+  it('puts in-stock items first and out-of-stock items second', () => {
+    const { inStock, outOfStock } = partitionByStock([
+      item('a', 0), item('b', 5), item('c', 0), item('d', 1),
+    ])
+    expect(inStock.map((i) => i.name)).toEqual(['b', 'd'])
+    expect(outOfStock.map((i) => i.name)).toEqual(['a', 'c'])
+  })
+
+  it('preserves the incoming order within each group', () => {
+    const { inStock } = partitionByStock([item('z', 3), item('a', 3)])
+    expect(inStock.map((i) => i.name)).toEqual(['z', 'a'])
+  })
+
+  it('treats negative stock as out of stock', () => {
+    const { outOfStock } = partitionByStock([item('a', -1)])
+    expect(outOfStock.map((i) => i.name)).toEqual(['a'])
+  })
+
+  it('treats a non-finite stock value as out of stock rather than in stock', () => {
+    const { inStock, outOfStock } = partitionByStock([
+      { ...item('bad', 0), stock: NaN as unknown as number },
+    ])
+    expect(inStock).toHaveLength(0)
+    expect(outOfStock.map((i) => i.name)).toEqual(['bad'])
+  })
+
+  it('treats an infinite stock value as out of stock', () => {
+    const { inStock, outOfStock } = partitionByStock([
+      { ...item('huge', 0), stock: Infinity as unknown as number },
+    ])
+    expect(inStock).toHaveLength(0)
+    expect(outOfStock.map((i) => i.name)).toEqual(['huge'])
+  })
+
+  it('handles stock arriving as a numeric string', () => {
+    const { inStock } = partitionByStock([
+      { ...item('a', 0), stock: '4' as unknown as number },
+    ])
+    expect(inStock.map((i) => i.name)).toEqual(['a'])
+  })
+
+  it('returns two empty groups for an empty list', () => {
+    expect(partitionByStock([])).toEqual({ inStock: [], outOfStock: [] })
   })
 })

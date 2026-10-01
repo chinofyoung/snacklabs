@@ -27,8 +27,13 @@ export default function Orders() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [period, setPeriod] = useState<Period>('all')
-  const [summaryCount, setSummaryCount] = useState(0)
-  const [summaryTotal, setSummaryTotal] = useState(0)
+  // null = the summary read failed (this is only rendered once loading has
+  // settled, so it never means "not yet"). Deliberately NOT {count: 0, total: 0}:
+  // that would print "No orders" and a ₱0.00 total on a failed read.
+  const [summary, setSummary] = useState<{ count: number; total: number } | null>(null)
+  // True when the orders read failed. An empty `orders` is only believed as
+  // "No orders yet" when this is false.
+  const [listFailed, setListFailed] = useState(false)
   const [pendingCancel, setPendingCancel] = useState<Order | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
@@ -37,17 +42,31 @@ export default function Orders() {
   // lets an admin's session read every row in the table, so this page must filter to
   // the signed-in user explicitly rather than relying on RLS alone — otherwise an
   // admin viewing "My orders" would see everyone's orders.
-  const loadPage = useCallback(async (p: number) => {
-    if (!userId) return
+  // Resolves true when the page loaded, so "Load more" only advances on success.
+  const loadPage = useCallback(async (p: number): Promise<boolean> => {
+    if (!userId) return false
     let q = supabase.from('orders').select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE - 1)
     if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
-    const { data } = await q
-    const rows = (data as Order[]) ?? []
+    const { data, error } = await q
+    // A failed read must not render as "No orders yet". Page 0 clears the list so
+    // a stale one never sits under a new period's label; a later page keeps what
+    // is already on screen and leaves "Load more" available to retry.
+    if (error || !data) {
+      if (p === 0) {
+        setOrders([])
+        setHasMore(false)
+      }
+      setListFailed(true)
+      return false
+    }
+    setListFailed(false)
+    const rows = data as Order[]
     setOrders((prev) => (p === 0 ? rows : [...prev, ...rows]))
     setHasMore(rows.length === PAGE_SIZE)
+    return true
   }, [period, userId])
 
   const loadSummary = useCallback(async () => {
@@ -57,10 +76,13 @@ export default function Orders() {
     // which reflects the full filtered match regardless of the range cap.
     let q = supabase.from('orders').select('total', { count: 'exact' }).eq('user_id', userId).range(0, 4999)
     if (period !== 'all') q = q.gte('created_at', periodStart(period)!.toISOString())
-    const { data, count } = await q
-    const rows = (data as { total: number }[]) ?? []
-    setSummaryCount(count ?? 0)
-    setSummaryTotal(rows.reduce((sum, r) => sum + Number(r.total), 0))
+    const { data, count, error } = await q
+    if (error || !data || count === null) {
+      setSummary(null)
+      return
+    }
+    const rows = data as { total: number }[]
+    setSummary({ count, total: rows.reduce((sum, r) => sum + Number(r.total), 0) })
   }, [period, userId])
 
   useEffect(() => {
@@ -89,9 +111,8 @@ export default function Orders() {
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-4 app-frame">
-      <header className="flex items-center gap-3">
-        <Link to="/store" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
+    <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-4 app-frame pb-28">
+      <header>
         <h1 className="font-display text-xl font-bold">My orders</h1>
       </header>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -114,22 +135,30 @@ export default function Orders() {
         <>
           <p className="text-sm text-ink-500">
             {periodLabel(period)} ·{' '}
-            {summaryCount === 0 ? (
+            {summary === null ? (
+              <span className="text-red-600" role="alert">Couldn&apos;t load the summary</span>
+            ) : summary.count === 0 ? (
               'No orders'
             ) : (
               <>
-                {summaryCount} order{summaryCount === 1 ? '' : 's'} ·{' '}
-                <span className="tabular-nums">{formatPeso(summaryTotal)}</span>
+                {summary.count} order{summary.count === 1 ? '' : 's'} ·{' '}
+                <span className="tabular-nums">{formatPeso(summary.total)}</span>
               </>
             )}
           </p>
+          {listFailed && (
+            <p className="text-sm text-red-600" role="alert">
+              Couldn&apos;t load your orders — check your connection and reload.
+            </p>
+          )}
           {orders.length === 0 ? (
-            <div className="text-center py-12 space-y-2">
-              <ReceiptText className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
-              <p className="text-ink-700 font-medium">No orders yet</p>
-              <p className="text-ink-500 text-sm">Orders you place will show up here.</p>
-              <Link to="/store" className="inline-block text-brand-700 font-semibold mt-2 rounded-md">← Back to store</Link>
-            </div>
+            !listFailed && (
+              <div className="text-center py-12 space-y-2">
+                <ReceiptText className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
+                <p className="text-ink-700 font-medium">No orders yet</p>
+                <p className="text-ink-500 text-sm">Orders you place will show up here.</p>
+              </div>
+            )
           ) : (
             orders.map((o) => (
               <div key={o.id} className="rounded-lg bg-surface-raised p-4 shadow-card">
@@ -164,7 +193,7 @@ export default function Orders() {
       )}
       {!loading && hasMore && (
         <button
-          onClick={async () => { const next = page + 1; setLoadingMore(true); await loadPage(next); setPage(next); setLoadingMore(false); }}
+          onClick={async () => { const next = page + 1; setLoadingMore(true); if (await loadPage(next)) setPage(next); setLoadingMore(false); }}
           disabled={loadingMore}
           className="w-full rounded-2xl bg-white shadow-sm py-3.5 font-medium text-ink-900 active:scale-[0.98] transition disabled:opacity-50"
         >

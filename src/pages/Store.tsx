@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router'
 import { PackageOpen, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Item } from '../types'
 import ItemCard from '../components/ItemCard'
 import CartBar from '../components/CartBar'
 import CookieMark from '../components/CookieMark'
-import { useAuth } from '../context/AuthContext'
+import { partitionByStock } from '../lib/inventory'
 
 export default function Store() {
-  const { profile, signOut } = useAuth()
   const [items, setItems] = useState<Item[]>([])
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string | null>(null)
@@ -36,20 +34,16 @@ export default function Store() {
     (!category || i.category === category) &&
     i.name.toLowerCase().includes(search.toLowerCase()),
   )
+  const { inStock, outOfStock } = partitionByStock(visible)
 
   return (
-    <div className="max-w-md mx-auto min-h-dvh pb-28 app-frame">
+    <div className="max-w-md mx-auto min-h-dvh pb-44 app-frame">
       <header className="sticky top-0 z-10 bg-surface/90 backdrop-blur px-4 pt-4 pb-3 space-y-3 border-b border-line">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-xl font-extrabold flex items-center gap-1.5">
             <CookieMark className="size-6 text-brand-600" />
             SnackLabs
           </h1>
-          <div className="flex items-center gap-4 text-sm">
-            <Link to="/orders" className="text-ink-500 rounded-md">My orders</Link>
-            {profile?.is_admin && <Link to="/admin" className="text-brand-700 font-semibold rounded-md">Admin</Link>}
-            <button onClick={signOut} className="text-ink-500 rounded-md">Sign out</button>
-          </div>
         </div>
         <input
           value={search}
@@ -87,9 +81,21 @@ export default function Store() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 px-4 pt-3">
-          {visible.map((i) => <ItemCard key={i.id} item={i} />)}
-        </div>
+        <>
+          {inStock.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 px-4 pt-3">
+              {inStock.map((i) => <ItemCard key={i.id} item={i} />)}
+            </div>
+          )}
+          {outOfStock.length > 0 && (
+            <>
+              <h2 className="font-semibold text-sm text-ink-700 px-4 pt-6">Out of stock</h2>
+              <div className="grid grid-cols-2 gap-3 px-4 pt-3">
+                {outOfStock.map((i) => <ItemCard key={i.id} item={i} />)}
+              </div>
+            </>
+          )}
+        </>
       )}
       <CartBar />
     </div>

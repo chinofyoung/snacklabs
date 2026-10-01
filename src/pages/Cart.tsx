@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Banknote, Landmark, ShoppingBasket, Smartphone, Trash2 } from 'lucide-react'
+import { Banknote, Landmark, ShoppingBasket, Smartphone, Trash2, Wallet as WalletIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatPeso } from '../lib/money'
+import { canAfford } from '../lib/wallet'
 import ConfirmDialog from '../components/ConfirmDialog'
 import type { CartLine, PaymentMethod } from '../types'
 
-function methodDetail(m: PaymentMethod): string | null {
+// `balance` is null until the wallets read settles (or if it failed), and then
+// renders as a dash rather than a false P0.00.
+function methodDetail(m: PaymentMethod, balance: number | null): string | null {
+  if (m.type === 'wallet') return `Balance ${balance === null ? '—' : formatPeso(balance)}`
   const name = m.account_name.trim()
   const number = m.account_number.trim()
   if (name && number) return `${name} · ${number}`
@@ -16,29 +21,96 @@ function methodDetail(m: PaymentMethod): string | null {
 
 export default function Cart() {
   const { lines, setLineQty, total, clear, count } = useCart()
+  const { session } = useAuth()
+  const userId = session?.user.id ?? null
   const [methods, setMethods] = useState<PaymentMethod[]>([])
+  // Tells "loaded, and none configured" apart from "could not load": an empty
+  // `methods` alone is both, and only the first is the admin's doing.
+  const [methodsStatus, setMethodsStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
+  // The method the customer tapped. Never read directly: `selectedMethod` below
+  // is what's actually in effect, because a tapped wallet can stop being usable.
   const [methodId, setMethodId] = useState<string | null>(null)
+  // null means "not known": still loading, or the read failed or came back with
+  // no row (balanceFailed). None of those may be shown as an empty wallet.
+  const [balance, setBalance] = useState<number | null>(null)
+  const [balanceFailed, setBalanceFailed] = useState(false)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingRemove, setPendingRemove] = useState<CartLine | null>(null)
   const [confirmingOrder, setConfirmingOrder] = useState(false)
   const navigate = useNavigate()
 
-  useEffect(() => {
+  const loadMethods = useCallback(() => {
     supabase.from('payment_methods').select('*').eq('is_active', true)
-      .then(({ data }) => {
-        const m = (data as PaymentMethod[]) ?? []
-        setMethods(m)
-        if (m.length > 0) setMethodId(m[0].id)
+      .then(({ data, error: readErr }) => {
+        if (readErr) {
+          setMethodsStatus('failed')
+          return
+        }
+        setMethods((data as PaymentMethod[]) ?? [])
+        setMethodsStatus('ready')
       })
   }, [])
+
+  useEffect(() => { loadMethods() }, [loadMethods])
+
+  const retryMethods = () => {
+    setMethodsStatus('loading')
+    loadMethods()
+  }
+
+  // Filtered to the signed-in user explicitly: the wallets select policy lets an
+  // admin's session read every row (supabase/migrations/20261001000000_wallet_schema.sql),
+  // so relying on RLS would show an admin someone else's balance.
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    const loadBalance = async () => {
+      try {
+        const { data, error: readErr } = await supabase
+          .from('wallets').select('balance').eq('user_id', userId).maybeSingle()
+        if (cancelled) return
+        // No row is unknown, not zero. A read that RLS filters to nothing is a
+        // 200 with `error: null` and `data: null`, so checking `readErr` alone
+        // would turn it into "Not enough — top up" for a customer who has money.
+        // Every user has a wallets row (migration backfill + handle_new_user), so
+        // an absent one means this read is not telling us the truth.
+        if (readErr || !data) setBalanceFailed(true)
+        else setBalance(Number(data.balance))
+      } catch {
+        if (!cancelled) setBalanceFailed(true)
+      }
+    }
+    void loadBalance()
+    return () => { cancelled = true }
+  }, [userId])
+
+  // The wallet is only usable once its balance is known and covers the cart.
+  // canAfford compares in centavos; never compare balance >= total here.
+  const affordable = (m: PaymentMethod) =>
+    m.type !== 'wallet' || (balance !== null && canAfford(balance, total))
+  // Wallet first when it can pay, so it is the natural default. Array.sort is
+  // stable, so every other method keeps the order it came back in.
+  const orderedMethods = [...methods].sort((a, b) =>
+    Number(b.type === 'wallet' && affordable(b)) - Number(a.type === 'wallet' && affordable(a)))
+  const hasWallet = methods.some((m) => m.type === 'wallet')
+  const balanceSettled = balance !== null || balanceFailed
+  // Derived rather than set on load, so the effective method follows the cart:
+  // a wallet that stops covering the total after a quantity change, or that
+  // hasn't loaded its balance yet, never leaves the customer parked on it.
+  // Auto-pick waits for the balance when there is a wallet to rank, so the
+  // default can't flip from another method to the wallet a moment later.
+  const selectedMethod =
+    orderedMethods.find((m) => m.id === methodId && affordable(m))
+    ?? (hasWallet && !balanceSettled ? undefined : orderedMethods.find(affordable))
+    ?? null
 
   const placeOrder = async (): Promise<boolean> => {
     setPlacing(true)
     setError(null)
     const { data, error } = await supabase.rpc('create_order', {
       p_items: lines.map((l) => ({ item_id: l.item.id, qty: l.qty })),
-      p_payment_method_id: methodId,
+      p_payment_method_id: selectedMethod?.id ?? null,
     })
     setPlacing(false)
     if (error) {
@@ -58,8 +130,6 @@ export default function Cart() {
     await placeOrder()
     setConfirmingOrder(false)
   }
-
-  const selectedMethod = methods.find((m) => m.id === methodId) ?? null
 
   if (lines.length === 0) {
     return (
@@ -109,43 +179,81 @@ export default function Cart() {
 
       <section className="space-y-2">
         <h2 className="font-semibold text-sm text-ink-700">Pay with</h2>
-        {methods.length === 0 && (
+        {methodsStatus === 'loading' && (
+          <p className="text-sm text-ink-500">Loading payment methods…</p>
+        )}
+        {methodsStatus === 'failed' && (
+          <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 flex items-center justify-between gap-3" role="alert">
+            <p>Couldn&apos;t load payment methods.</p>
+            <button onClick={retryMethods} className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-red-600 shadow-card">
+              Retry
+            </button>
+          </div>
+        )}
+        {methodsStatus === 'ready' && methods.length === 0 && (
           <p className="text-sm text-ink-500">No payment methods set up yet — ask your admin.</p>
         )}
-        {methods.map((m) => {
-          const selected = methodId === m.id
-          const detail = methodDetail(m)
+        {orderedMethods.map((m) => {
+          const selected = selectedMethod?.id === m.id
+          // Balance known but short. Unknown balance (loading, or the read
+          // failed) is deliberately not this case: "not enough" would be a
+          // claim we can't back, so that row is just disabled, below.
+          const short = m.type === 'wallet' && balance !== null && !affordable(m)
+          const detail = short ? 'Not enough — top up' : methodDetail(m, balance)
+          // Only the icon and label dim on a short wallet. The hint is the
+          // row's one call to action, so it stays at full strength in brand
+          // colour, and the row itself is never faded: `opacity` on the link
+          // would also fade its focus outline (src/index.css draws it on the
+          // element) below the 3:1 non-text minimum.
+          const dim = short ? 'opacity-60' : ''
+          const hintCls = short
+            ? 'text-brand-700 font-medium'
+            : selected ? 'text-white/70' : 'text-ink-500'
+          const content = (
+            <>
+              <MethodIcon type={m.type} className={dim} />
+              <span className="flex flex-col min-w-0">
+                <span className={`font-medium truncate ${dim}`}>{m.label}</span>
+                {detail && <span className={`text-xs truncate ${hintCls}`}>{detail}</span>}
+              </span>
+            </>
+          )
+
+          // A link, not a disabled button: a disabled control swallows the tap,
+          // and wrapping one in a link is invalid HTML. Not selectable, but it
+          // is a live, focusable control that goes to the Top up tab, so it
+          // deliberately carries no aria-disabled or tabindex=-1.
+          if (short) {
+            return (
+              <Link key={m.id} to="/wallet" className={rowCls(false)}>
+                {content}
+              </Link>
+            )
+          }
+
+          const unusable = !affordable(m)
           return (
             <button
               key={m.id}
+              disabled={unusable}
               onClick={() => setMethodId(m.id)}
-              className={`w-full rounded-md p-3 text-left flex items-center gap-3 transition ${
-                selected ? 'bg-ink-900 text-white' : 'bg-surface-raised shadow-card'
-              }`}
+              className={`${rowCls(selected)} ${unusable ? 'opacity-60' : ''}`}
             >
-              {m.type === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
-              {m.type === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
-              {m.type === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
-              {m.type !== 'ewallet' && m.type !== 'bank' && m.type !== 'cash' && (
-                <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />
-              )}
-              <span className="flex flex-col min-w-0">
-                <span className="font-medium truncate">{m.label}</span>
-                {detail && (
-                  <span className={`text-xs truncate ${selected ? 'text-white/70' : 'text-ink-500'}`}>
-                    {detail}
-                  </span>
-                )}
-              </span>
+              {content}
             </button>
           )
         })}
+        {hasWallet && balanceFailed && (
+          <p className="text-sm text-red-600" role="alert">
+            Could not load your wallet balance — reload to pay from it.
+          </p>
+        )}
       </section>
 
       {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
 
       <button
-        disabled={placing || !methodId}
+        disabled={placing || !selectedMethod}
         onClick={() => setConfirmingOrder(true)}
         className="w-full rounded-lg bg-brand-700 text-white py-4 font-bold text-lg disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
       >
@@ -180,6 +288,19 @@ export default function Cart() {
       />
     </div>
   )
+}
+
+const rowCls = (selected: boolean) =>
+  `w-full rounded-md p-3 text-left flex items-center gap-3 transition ${
+    selected ? 'bg-ink-900 text-white' : 'bg-surface-raised shadow-card'
+  }`
+
+function MethodIcon({ type, className = '' }: { type: PaymentMethod['type']; className?: string }) {
+  const cls = `size-5 ${className}`.trim()
+  if (type === 'ewallet') return <Smartphone className={cls} strokeWidth={2.5} aria-hidden="true" />
+  if (type === 'cash') return <Banknote className={cls} strokeWidth={2.5} aria-hidden="true" />
+  if (type === 'wallet') return <WalletIcon className={cls} strokeWidth={2.5} aria-hidden="true" />
+  return <Landmark className={cls} strokeWidth={2.5} aria-hidden="true" />
 }
 
 function Stepper({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {

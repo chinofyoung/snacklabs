@@ -4,6 +4,7 @@ import { ReceiptText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { describePayError } from '../../lib/wallet'
 import { PERIODS, periodStart, periodLabel, type Period } from '../../lib/period'
 import type { Order, OrderStatus } from '../../types'
 
@@ -98,7 +99,11 @@ export default function AdminOrders() {
     setBusy(true)
     const { error } = await supabase.rpc('confirm_order', { p_order_id: o.id, p_verdict: null })
     setBusy(false)
-    if (error) { alert(error.message); return }
+    // confirm_order is also the admin's way to take a WALLET order to 'paid', and
+    // the debit that follows can refuse ('insufficient wallet balance'). Routed
+    // through describePayError so that reaches the admin as a sentence, not as
+    // a raw Postgres string.
+    if (error) { alert(describePayError(error.message).text); return }
     setOpen(null)
     setPage(0)
     await loadPage(0)

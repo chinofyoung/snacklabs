@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router'
-import { Banknote, CircleCheck, Clock, ScanSearch } from 'lucide-react'
+import { Banknote, CircleCheck, Clock, ScanSearch, Wallet as WalletIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPeso } from '../lib/money'
 import { compressImage } from '../lib/image'
+import { canAfford, describePayError, isInsufficientBalance } from '../lib/wallet'
 import type { Order, PaymentMethod } from '../types'
 
 export default function Pay() {
@@ -12,20 +13,73 @@ export default function Pay() {
   const [order, setOrder] = useState<Order | null>(null)
   const [method, setMethod] = useState<PaymentMethod | null>(null)
   const [countdown, setCountdown] = useState(10)
+  // null means "not known": still loading, or the read failed or came back with
+  // no row (balanceFailed). None of those may be shown as an empty wallet.
+  const [balance, setBalance] = useState<number | null>(null)
+  const [balanceFailed, setBalanceFailed] = useState(false)
 
   useEffect(() => {
     if (!orderId) return
     supabase.from('orders').select('*').eq('id', orderId).single()
       .then(async ({ data }) => {
         const o = data as Order | null
-        setOrder(o)
         if (o?.payment_method_id) {
           const { data: pm } = await supabase
             .from('payment_methods').select('*').eq('id', o.payment_method_id).single()
           setMethod(pm as PaymentMethod)
         }
+        // The order is only published once its method is known (React batches
+        // both updates into one render). Otherwise a wallet order would flash
+        // the receipt-upload control until the method arrived, and a tap in
+        // that window would send a wallet order to receipt verification.
+        setOrder(o)
       })
   }, [orderId])
+
+  const isWalletOrder = method?.type === 'wallet'
+  const ownerId = order?.user_id ?? null
+  // Filtered to the order's owner explicitly: the wallets select policy lets an
+  // admin's session read every row (supabase/migrations/20261001000000_wallet_schema.sql),
+  // so an unfiltered read could show someone else's balance.
+  const loadBalance = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!ownerId) return
+    try {
+      const { data, error } = await supabase
+        .from('wallets').select('balance').eq('user_id', ownerId).maybeSingle()
+      if (!isCurrent()) return
+      // `!data` is the RLS-filtered case: a 200 with `error: null` and no row.
+      // It is unknown, exactly like an error, never a balance of zero.
+      if (error || !data) {
+        // A failed read leaves the balance unknown, not stale: after a refusal
+        // the old figure is exactly the one the server just contradicted.
+        setBalance(null)
+        setBalanceFailed(true)
+      } else {
+        setBalance(Number(data.balance))
+        setBalanceFailed(false)
+      }
+    } catch {
+      if (isCurrent()) {
+        setBalance(null)
+        setBalanceFailed(true)
+      }
+    }
+  }, [ownerId])
+
+  useEffect(() => {
+    if (!isWalletOrder) return
+    let cancelled = false
+    void loadBalance(() => !cancelled)
+    return () => { cancelled = true }
+  }, [isWalletOrder, loadBalance])
+
+  // The server just refused on balance, so the figure on the card is wrong.
+  // Blank it (rather than keep showing "₱10.00 available") until the re-read lands.
+  const refreshBalance = () => {
+    setBalance(null)
+    setBalanceFailed(false)
+    void loadBalance()
+  }
 
   useEffect(() => {
     if (order?.status !== 'paid') return
@@ -43,7 +97,7 @@ export default function Pay() {
     <div className="max-w-md mx-auto min-h-dvh px-4 py-4 space-y-5 app-frame">
       <header className="flex items-center gap-3">
         <Link to="/store" className="text-ink-500 text-lg leading-none rounded-md" aria-label="Back to store">←</Link>
-        <h1 className="font-display text-xl font-bold">Scan & pay</h1>
+        <h1 className="font-display text-xl font-bold">{method?.type === 'wallet' ? 'Pay' : 'Scan & pay'}</h1>
       </header>
 
       <div className="rounded-lg bg-surface-raised p-6 shadow-card text-center space-y-4">
@@ -61,7 +115,22 @@ export default function Pay() {
             </div>
           </>
         )}
-        {method && method.type !== 'cash' && (
+        {method && method.type === 'wallet' && (
+          <>
+            <WalletIcon className="size-16 mx-auto text-brand-600" strokeWidth={2} aria-hidden="true" />
+            <div>
+              <p className="font-semibold">
+                {order.status === 'paid' ? 'Paid from your balance' : 'Pay from your balance'}
+              </p>
+              {order.status === 'awaiting_payment' && (
+                <p className="text-sm text-ink-500">
+                  {walletSummary(balance, balanceFailed, order.total)}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+        {method && method.type !== 'cash' && method.type !== 'wallet' && (
           <>
             <img src={method.qr_image_url ?? undefined} alt={`${method.label} QR code`} className="mx-auto w-64 rounded-md" />
             <div>
@@ -72,7 +141,7 @@ export default function Pay() {
         )}
       </div>
 
-      <PaymentStatus order={order} method={method} onUpdated={setOrder} />
+      <PaymentStatus order={order} method={method} onUpdated={setOrder} onInsufficient={refreshBalance} />
 
       {['paid', 'needs_review', 'cancelled'].includes(order.status) && (
         <Link
@@ -90,7 +159,28 @@ export default function Pay() {
   )
 }
 
-type Phase = 'idle' | 'uploading' | 'verifying' | 'done'
+type Phase = 'idle' | 'uploading' | 'verifying' | 'paying' | 'done'
+
+// What is left after the purchase, in whole centavos so float noise can never
+// surface as "-P0.00" when the balance covers the total exactly.
+function remainingAfter(balance: number, total: number): number {
+  return (Math.round(balance * 100) - Math.round(total * 100)) / 100
+}
+
+// Display only: the Pay button stays enabled whatever this says, because the
+// server decides whether the balance covers the order (it may have moved since
+// this page loaded). canAfford compares in centavos, as the database does.
+function walletSummary(balance: number | null, failed: boolean, total: number): string {
+  if (balance === null) {
+    return failed
+      ? "Couldn't load your balance — we'll check it when you pay."
+      : 'Checking your balance…'
+  }
+  if (!canAfford(balance, total)) {
+    return `${formatPeso(balance)} available — not enough for this order`
+  }
+  return `${formatPeso(balance)} available · ${formatPeso(remainingAfter(balance, total))} left after`
+}
 
 async function edgeErrorMessage(err: unknown, fallback: string): Promise<string> {
   const ctx = (err as { context?: Response } | null)?.context
@@ -103,11 +193,21 @@ async function edgeErrorMessage(err: unknown, fallback: string): Promise<string>
   return err instanceof Error ? err.message : fallback
 }
 
-function PaymentStatus({ order, method, onUpdated }: { order: Order; method: PaymentMethod | null; onUpdated: (o: Order) => void }) {
+interface PaymentStatusProps {
+  order: Order
+  method: PaymentMethod | null
+  onUpdated: (o: Order) => void
+  // The server refused on balance: the parent's cached balance is now known wrong.
+  onInsufficient: () => void
+}
+
+function PaymentStatus({ order, method, onUpdated, onInsufficient }: PaymentStatusProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [errorLink, setErrorLink] = useState<'topup' | 'orders' | null>(null)
   const isCash = method?.type === 'cash'
+  const isWallet = method?.type === 'wallet'
 
   const handleFile = async (file: File) => {
     setError(null)
@@ -137,6 +237,58 @@ function PaymentStatus({ order, method, onUpdated }: { order: Order; method: Pay
     }
   }
 
+  const readOrder = async (): Promise<Order | null> => {
+    const { data } = await supabase.from('orders').select('*').eq('id', order.id).single()
+    return (data as Order | null) ?? null
+  }
+
+  // True when the order has moved off awaiting_payment, in which case the
+  // existing paid / cancelled UI takes over from the fresh row.
+  const resyncOrder = async (): Promise<boolean> => {
+    const fresh = await readOrder()
+    if (!fresh || fresh.status === 'awaiting_payment') return false
+    onUpdated(fresh)
+    return true
+  }
+
+  // No receipt, no verification: the debit is a single RPC, and its success is
+  // read back from the order so the existing paid state takes over.
+  const payFromWallet = async () => {
+    setError(null)
+    setErrorLink(null)
+    setPhase('paying')
+    const { error: rpcErr } = await supabase.rpc('pay_order_with_wallet', { p_order_id: order.id })
+    if (rpcErr) {
+      let moved = false
+      if (isInsufficientBalance(rpcErr.message)) {
+        // The server is authoritative on balance: it may have moved since this
+        // page rendered, so its refusal wins and the cached figure is refreshed.
+        onInsufficient()
+      } else {
+        // Any other error does not prove nothing happened. postgrest-js returns
+        // a dropped response as an error even when the server already
+        // committed, and the order may equally have been paid in another tab or
+        // cancelled by an admin. Resync first; only an order that has not moved
+        // gets the error.
+        moved = await resyncOrder()
+      }
+      setPhase('idle')
+      if (moved) return
+      const view = describePayError(rpcErr.message)
+      setError(view.text)
+      setErrorLink(view.link)
+      return
+    }
+    const fresh = await readOrder()
+    if (fresh) {
+      onUpdated(fresh)
+    } else {
+      setError('Your payment went through, but we could not refresh this page.')
+      setErrorLink('orders')
+    }
+    setPhase('done')
+  }
+
   if (order.status === 'paid') {
     return (
       <div className="rounded-lg bg-green-50 text-green-800 p-5 text-center space-y-1">
@@ -163,6 +315,31 @@ function PaymentStatus({ order, method, onUpdated }: { order: Order; method: Pay
         <ScanSearch className="size-8 mx-auto" strokeWidth={2.5} aria-hidden="true" />
         <p className="font-bold">Verifying your payment…</p>
         <p className="text-sm">This usually takes a few seconds. Check My Orders for the result.</p>
+      </div>
+    )
+  }
+
+  if (isWallet) {
+    return (
+      <div className="space-y-2">
+        <button
+          disabled={phase !== 'idle'}
+          onClick={() => void payFromWallet()}
+          className="w-full rounded-lg bg-brand-700 text-white py-4 font-bold disabled:bg-ink-400/40 disabled:text-ink-500 active:scale-[0.98] transition"
+        >
+          {phase === 'idle' && `Pay ${formatPeso(order.total)} from balance`}
+          {phase === 'paying' && 'Paying…'}
+          {phase === 'done' && 'Done'}
+        </button>
+        {error && <p className="text-sm text-red-600 text-center" role="alert">{error}</p>}
+        {errorLink && (
+          <Link
+            to={errorLink === 'topup' ? '/wallet' : '/orders'}
+            className="block text-center text-sm font-semibold text-brand-700 py-2 rounded-md"
+          >
+            {errorLink === 'topup' ? 'Top up' : 'My Orders'}
+          </Link>
+        )}
       </div>
     )
   }

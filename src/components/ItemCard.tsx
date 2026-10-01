@@ -11,9 +11,16 @@ export default function ItemCard({ item }: { item: Item }) {
 
   return (
     <div className={`rounded-lg bg-surface-raised shadow-card overflow-hidden flex flex-col transition ${out ? 'opacity-45 grayscale-[40%]' : ''}`}>
-      <div className="aspect-square bg-brand-50 flex items-center justify-center relative">
+      {/* overflow-hidden + an absolutely positioned img, rather than an in-flow
+          one: aspect-square only sets aspect-ratio, and a flex container's
+          min-height:auto lets in-flow content override it. A portrait source
+          image (e.g. 415x739) therefore stretched this box well past square,
+          so cards in the same row had visibly different image heights. Taking
+          the image out of flow makes the ratio authoritative for every source
+          aspect ratio. */}
+      <div className="aspect-square bg-brand-50 flex items-center justify-center relative overflow-hidden">
         {item.image_url
-          ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+          ? <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
           : <ShoppingBasket className="size-10 text-brand-600/40" strokeWidth={2.5} aria-hidden="true" />}
         {out && (
           <span className="absolute top-2 left-2 rounded-full bg-ink-900/80 text-white text-[10px] font-semibold px-2 py-0.5">

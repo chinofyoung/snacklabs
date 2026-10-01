@@ -62,6 +62,18 @@ Deno.serve(async (req) => {
   const { data: method } = await admin
     .from('payment_methods').select('*').eq('id', order.payment_method_id).single()
 
+  // A wallet order is never verified here. It is paid by pay_order_with_wallet,
+  // which flips the status and lets the sync_order_wallet trigger take the money in
+  // the same transaction; the funds were already checked when an admin approved the
+  // top-up, so there is nothing to re-verify. Pay.tsx only offers the receipt picker
+  // for non-wallet methods, but a failed payment-method read on the client falls
+  // through to it, so the guard has to be here too. Without it the order would be
+  // marked 'verifying', spend an Anthropic call, and show the customer a receipt
+  // step they do not need. 409 matches the status-conflict response above.
+  if (method?.type === 'wallet') {
+    return json({ error: 'wallet orders are paid from your balance, not by receipt' }, 409)
+  }
+
   // Mark verifying + attach receipt
   await admin.from('orders')
     .update({ status: 'verifying', receipt_image_url: receipt_path })

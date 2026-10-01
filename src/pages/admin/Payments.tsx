@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Banknote, CreditCard, Landmark, Smartphone } from 'lucide-react'
+import { Banknote, CreditCard, Landmark, Smartphone, Wallet as WalletIcon } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { compressImage } from '../../lib/image'
 import type { PaymentMethod } from '../../types'
@@ -16,6 +16,16 @@ type Draft = {
 }
 
 const EMPTY: Draft = { label: '', type: 'ewallet', account_name: '', account_number: '', file: null }
+
+// The editor handles only the admin-managed methods. The wallet method is a
+// seeded singleton with no QR or account details: it is listed so an admin can
+// switch it on and off, but it is toggle-only (protect_wallet_method refuses to
+// delete or re-type it, so the UI does not offer Edit either). `isEditable`
+// is what narrows a listed row to this type, which keeps `m.type` assignable to
+// Draft['type'] now that PaymentMethod['type'] includes 'wallet'.
+type EditableMethod = Omit<PaymentMethod, 'type'> & { type: Draft['type'] }
+
+const isEditable = (m: PaymentMethod): m is EditableMethod => m.type !== 'wallet'
 
 export default function PaymentMethods() {
   const [methods, setMethods] = useState<PaymentMethod[]>([])
@@ -106,7 +116,9 @@ export default function PaymentMethods() {
                 <img src={m.qr_image_url} alt="" className="size-12 rounded-md object-cover" />
               ) : (
                 <div className="size-12 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
-                  <Banknote className="size-6 text-brand-600/60" strokeWidth={2.5} aria-hidden="true" />
+                  {m.type === 'wallet'
+                    ? <WalletIcon className="size-6 text-brand-600/60" strokeWidth={2.5} aria-hidden="true" />
+                    : <Banknote className="size-6 text-brand-600/60" strokeWidth={2.5} aria-hidden="true" />}
                 </div>
               )}
               <div className="grow">
@@ -114,22 +126,27 @@ export default function PaymentMethods() {
                   {m.type === 'ewallet' && <Smartphone className="size-5" strokeWidth={2.5} aria-hidden="true" />}
                   {m.type === 'bank' && <Landmark className="size-5" strokeWidth={2.5} aria-hidden="true" />}
                   {m.type === 'cash' && <Banknote className="size-5" strokeWidth={2.5} aria-hidden="true" />}
+                  {m.type === 'wallet' && <WalletIcon className="size-5" strokeWidth={2.5} aria-hidden="true" />}
                   {m.label}
                 </p>
-                <p className="text-xs text-ink-500">{m.account_name} {m.account_number && `· ${m.account_number}`}</p>
+                {m.type === 'wallet'
+                  ? <p className="text-xs text-ink-500">Pays from the customer&apos;s balance. Can only be switched on or off.</p>
+                  : <p className="text-xs text-ink-500">{m.account_name} {m.account_number && `· ${m.account_number}`}</p>}
               </div>
               <button onClick={() => toggle(m)} className="text-sm text-ink-500 px-1.5 py-1 rounded-md">
                 {m.is_active ? 'Disable' : 'Enable'}
               </button>
-              <button
-                onClick={() => setDraft({
-                  id: m.id, label: m.label, type: m.type, account_name: m.account_name,
-                  account_number: m.account_number, file: null, existing_qr: m.qr_image_url,
-                })}
-                className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
-              >
-                Edit
-              </button>
+              {isEditable(m) && (
+                <button
+                  onClick={() => setDraft({
+                    id: m.id, label: m.label, type: m.type, account_name: m.account_name,
+                    account_number: m.account_number, file: null, existing_qr: m.qr_image_url,
+                  })}
+                  className="text-sm text-ink-500 px-1.5 py-1 rounded-md"
+                >
+                  Edit
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { ArrowLeft, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users } from 'lucide-react'
+import { ArrowLeft, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import CookieMark from '../../components/CookieMark'
 
@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/sales', label: 'Sales', icon: TrendingUp, end: false, mobileHidden: true },
   { to: '/admin/orders', label: 'Orders', icon: ReceiptText, end: false },
+  { to: '/admin/topups', label: 'Top-ups', icon: Wallet, end: false, mobileHidden: true },
   { to: '/admin/items', label: 'Items', icon: CupSoda, end: false },
   { to: '/admin/users', label: 'Users', icon: Users, end: false },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
@@ -54,7 +55,11 @@ export default function AdminLayout() {
         </Link>
       </aside>
 
-      <main className="grow pb-24 md:pb-8">
+      {/* min-w-0: as a flex item, main otherwise refuses to shrink below the
+          min-content width of its page, so one long nowrap/truncated line (a
+          requester's email on Top-ups) pushes the whole page past the viewport
+          next to the sidebar. */}
+      <main className="grow min-w-0 pb-24 md:pb-8">
         <Outlet />
       </main>
 

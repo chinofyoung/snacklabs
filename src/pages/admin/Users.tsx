@@ -3,6 +3,7 @@ import { Mail, Search, ShieldCheck, Users as UsersIcon } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { formatPeso } from '../../lib/money'
 import type { EmailAllowlistEntry } from '../../types'
 
 interface UserRow {
@@ -18,6 +19,14 @@ const PAGE_SIZE = 10
 export default function Users() {
   const { profile } = useAuth()
   const [users, setUsers] = useState<UserRow[]>([])
+  // Wallet balance by user id. Display only — balances change through the top-up
+  // approval and checkout flows, never from this page.
+  // null = not loaded yet, the fetch failed, or it came back empty. Deliberately
+  // NOT {}: this is a money column, and the migration backfills a wallets row for
+  // every user, so a false ₱0.00 is indistinguishable from a real zero balance. A
+  // dash says "no data"; a zero makes a claim we cannot back. Mirrors
+  // src/pages/Wallet.tsx.
+  const [balances, setBalances] = useState<Record<string, number> | null>(null)
   const [query, setQuery] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -57,6 +66,36 @@ export default function Users() {
       })
 
   useEffect(() => { load() }, [])
+
+  // No `user_id` filter: an admin session can read every wallets row by RLS policy,
+  // which is exactly what this page needs.
+  //
+  // Leaves `balances` null, and so shows dashes, for BOTH a transport error AND an
+  // empty result. The empty case is the dangerous one: when RLS filters a read to
+  // nothing, PostgREST answers 200 with `error: null` and `data: []`, so an error
+  // check alone never fires, and Object.fromEntries([]) is `{}`, which is truthy,
+  // so the render's `balances ? ... : '—'` would print ₱0.00 for every user. Zero
+  // rows is never a real answer here: the migration backfills a wallets row for
+  // every profile, and the admin viewing this page is itself a profile. A
+  // genuinely empty user list needs no special case, since it renders "No users
+  // found" and no balance cells, so the null map is never read.
+  //
+  // Failure is reported by leaving `balances` null rather than via the shared
+  // `error` state: load() and loadAllowlist() each setError(null) on success and
+  // all three run concurrently, so a wallets error would be wiped by whichever
+  // sibling resolves last.
+  const loadBalances = () =>
+    supabase.from('wallets').select('user_id, balance')
+      .then(({ data, error: fetchErr }) => {
+        if (fetchErr || !data?.length) return // leave null; never write {} on failure or on an empty result
+        // `balance` may arrive as a string or a number depending on how the numeric
+        // column is encoded over the wire; Number() normalises both.
+        setBalances(Object.fromEntries(
+          (data as { user_id: string; balance: number | string }[])
+            .map((w) => [w.user_id, Number(w.balance)])))
+      })
+
+  useEffect(() => { loadBalances() }, [])
 
   const loadAllowlist = () =>
     supabase.from('email_allowlist').select('id, email, note, created_at').order('created_at')
@@ -183,6 +222,13 @@ export default function Users() {
                       )}
                     </p>
                     <p className="text-xs text-ink-500 truncate">{u.email}</p>
+                    {/* Stacked under the email rather than as a trailing column: a sibling
+                        span here narrows the name block by ~70px, which clips the "You"
+                        chip and truncates emails on admin rows at phone widths. */}
+                    <span className="block text-sm font-bold text-brand-700 tabular-nums">
+                      <span className="sr-only">Wallet balance </span>
+                      {balances ? formatPeso(balances[u.id] ?? 0) : '—'}
+                    </span>
                   </div>
                   {u.is_admin && (
                     <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[10px] font-medium px-2 py-1">
