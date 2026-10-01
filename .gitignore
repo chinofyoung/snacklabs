@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase CLI local scratch. start-secrets holds the local stack's
+# SERVICE_ROLE_KEY, JWT secret and DB URL — local demo values, but a
+# directory named "secrets" should never be one `git add .` from history.
+supabase/.branches/
+supabase/.temp/
