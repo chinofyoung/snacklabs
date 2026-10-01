@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ChevronRight, PartyPopper, Sparkles, TrendingUp } from 'lucide-react'
+import { ChevronRight, PartyPopper, Sparkles, TrendingUp, Wallet } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatPeso } from '../../lib/money'
 import { projectedSales, remainingUnits } from '../../lib/inventory'
@@ -27,6 +27,12 @@ export default function Dashboard() {
   // topup_requests table must not read as "nothing to approve" and hide real work.
   const [topupCount, setTopupCount] = useState<number | null>(null)
   const [topupFailed, setTopupFailed] = useState(false)
+  // null = not loaded yet, or the read failed. Deliberately NOT 0: this is what the
+  // pantry owes its customers, and a failed read showing ₱0.00 would read as "we owe
+  // nothing". A real zero (no wallets, or all empty) arrives as 0 and still shows
+  // ₱0.00, so this is keyed on the read failing, never on the number being zero.
+  const [prepaidTotal, setPrepaidTotal] = useState<number | null>(null)
+  const [prepaidFailed, setPrepaidFailed] = useState(false)
   // null = not loaded yet, or the read failed. Deliberately NOT []: a failed read
   // must not read as "Projected sales ₱0.00 if all 0 units sell", and above all not
   // as "All stocked up", a false success.
@@ -67,6 +73,16 @@ export default function Dashboard() {
         const failed = error !== null || count === null
         setTopupFailed(failed)
         setTopupCount(failed ? null : count)
+      })
+
+    // An RPC rather than a client-side sum: PostgREST has no SUM, and summing rows
+    // here would understate the balance without any error, both when RLS filters
+    // rows (200 with error: null) and past PostgREST's 1000-row cap.
+    supabase.rpc('total_wallet_balance')
+      .then(({ data, error }) => {
+        const failed = error !== null || data === null || Number.isNaN(Number(data))
+        setPrepaidFailed(failed)
+        setPrepaidTotal(failed ? null : Number(data))
       })
 
     supabase.from('items').select('*').eq('is_active', true)
@@ -132,6 +148,18 @@ export default function Dashboard() {
           </p>
           {topupFailed && <LoadFailed what="the count" />}
         </Link>
+        <div className="rounded-lg bg-surface-raised p-5 shadow-card col-span-2">
+          <p className="text-sm text-ink-500 flex items-center gap-1">
+            <Wallet className="size-3.5" strokeWidth={2.5} aria-hidden="true" /> Prepaid balance
+          </p>
+          <p className="text-2xl font-black text-brand-700 tabular-nums">
+            {prepaidTotal === null ? '—' : formatPeso(prepaidTotal)}
+          </p>
+          {prepaidTotal !== null && (
+            <p className="text-xs text-ink-500 mt-1">held across all customer wallets</p>
+          )}
+          {prepaidFailed && <LoadFailed what="the balance" />}
+        </div>
         <Link to="/admin/items" className="rounded-lg bg-surface-raised p-5 shadow-card col-span-2 transition hover:shadow-none">
           <p className="text-sm text-ink-500 flex items-center justify-between">
             <span className="flex items-center gap-1">
