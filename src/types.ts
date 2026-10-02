@@ -129,3 +129,18 @@ export interface TopupRequest {
   reject_reason: string
   created_at: string
 }
+
+export type NotificationKind =
+  | 'topup_approved' | 'topup_rejected' | 'topup_requested'
+  | 'registration_pending' | 'order_needs_review'
+
+export interface AppNotification {
+  id: string
+  user_id: string
+  kind: NotificationKind
+  title: string
+  body: string
+  link: string
+  read_at: string | null
+  created_at: string
+}

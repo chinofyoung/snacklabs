@@ -1,24 +1,31 @@
 import { Link, NavLink, Outlet } from 'react-router'
-import { LayoutDashboard, ReceiptText, Settings, Store, Wallet } from 'lucide-react'
+import { Bell, LayoutDashboard, ReceiptText, Settings, Store, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import NavItemIcon from '../components/NavItemIcon'
+import { useNotifications } from '../context/NotificationsContext'
+import { unreadLabel } from '../lib/notifications'
 
 interface NavItem {
   to: string
   label: string
   icon: LucideIcon
   end: boolean
+  // Renders the unread notification count on this item.
+  showsUnread?: boolean
 }
 
 const NAV: NavItem[] = [
   { to: '/store', label: 'Store', icon: Store, end: false },
   { to: '/orders', label: 'My orders', icon: ReceiptText, end: false },
   { to: '/wallet', label: 'Top up', icon: Wallet, end: false },
+  { to: '/notifications', label: 'Alerts', icon: Bell, end: false, showsUnread: true },
   { to: '/settings', label: 'Settings', icon: Settings, end: false },
 ]
 
 export default function CustomerLayout() {
   const { profile } = useAuth()
+  const { unread } = useNotifications()
 
   return (
     <div className="min-h-dvh flex flex-col bg-surface">
@@ -66,13 +73,14 @@ export default function CustomerLayout() {
               key={n.to}
               to={n.to}
               end={n.end}
+              aria-label={n.showsUnread ? unreadLabel(n.label, unread) : undefined}
               className={({ isActive }) =>
                 `flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 ${
                   isActive ? 'text-brand-700 font-bold' : 'text-ink-500'
                 }`
               }
             >
-              <n.icon className="size-6" strokeWidth={2.5} aria-hidden="true" />
+              <NavItemIcon icon={n.icon} badge={n.showsUnread ? unread : 0} />
               {n.label}
             </NavLink>
           ))}

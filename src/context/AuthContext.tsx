@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { signOutAndReleasePush } from '../lib/signOut'
 import type { ApprovalStatus } from '../types'
 
 export interface Profile {
@@ -61,7 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { ignore = true }
   }, [session])
 
-  const signOut = async () => { await supabase.auth.signOut() }
+  // Also removes this browser's push subscription; see lib/signOut.ts.
+  const signOut = signOutAndReleasePush
 
   const awaitingProfile = !!session && profileSettledFor !== session.user.id
 

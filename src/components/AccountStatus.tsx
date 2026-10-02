@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import CookieMark from './CookieMark'
 import { useAuth } from '../context/AuthContext'
 
@@ -27,6 +28,18 @@ const COPY: Record<Status, { title: string; body: string }> = {
 export default function AccountStatus({ status }: { status: Status }) {
   const { signOut } = useAuth()
   const { title, body } = COPY[status]
+  // Signing out can wait on the push teardown (bounded at a few seconds), so the
+  // button has to show it is working or it reads as broken and gets tapped again.
+  const [signingOut, setSigningOut] = useState(false)
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    try {
+      await signOut()
+    } finally {
+      setSigningOut(false)
+    }
+  }
 
   return (
     // app-frame supplies the light surface: on desktop the body is the dark
@@ -37,10 +50,11 @@ export default function AccountStatus({ status }: { status: Status }) {
       <p className="text-sm text-ink-500 max-w-xs">{body}</p>
       <button
         type="button"
-        onClick={() => void signOut()}
-        className="rounded-lg bg-ink-900 text-white px-5 py-3 font-bold active:scale-[0.98] transition"
+        onClick={() => void handleSignOut()}
+        disabled={signingOut}
+        className="rounded-lg bg-ink-900 text-white px-5 py-3 font-bold active:scale-[0.98] transition disabled:opacity-50"
       >
-        Sign out
+        {signingOut ? 'Signing out…' : 'Sign out'}
       </button>
     </div>
   )

@@ -8,6 +8,7 @@ import Cart from './pages/Cart'
 import Pay from './pages/Pay'
 import Orders from './pages/Orders'
 import Wallet from './pages/Wallet'
+import Notifications from './pages/Notifications'
 import CustomerSettings from './pages/CustomerSettings'
 import CustomerLayout from './pages/CustomerLayout'
 import AdminLayout from './pages/admin/AdminLayout'
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/store" element={<Store />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/wallet" element={<Wallet />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<CustomerSettings />} />
       </Route>
       <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />

@@ -1,7 +1,10 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users, Wallet } from 'lucide-react'
+import { Bell, CupSoda, LayoutDashboard, ReceiptText, Settings, Store, TrendingUp, Users, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import CookieMark from '../../components/CookieMark'
+import NavItemIcon from '../../components/NavItemIcon'
+import { useNotifications } from '../../context/NotificationsContext'
+import { unreadLabel } from '../../lib/notifications'
 
 interface NavItem {
   to: string
@@ -10,9 +13,11 @@ interface NavItem {
   end: boolean
   // Keeps a section out of the mobile bottom bar while still showing it in the
   // desktop sidebar. The bar was at its width budget; dropping its Store tab (the
-  // header's Visit store link replaced it) freed one slot, which is deliberately
-  // left empty. Top-ups stays hidden: admins reach it from the Dashboard tile.
+  // header's Visit store link replaced it) freed one slot, which Alerts now takes.
+  // Top-ups stays hidden: admins reach it from the Dashboard tile.
   mobileHidden?: boolean
+  // Renders the unread notification count on this item.
+  showsUnread?: boolean
 }
 
 const NAV: NavItem[] = [
@@ -22,10 +27,13 @@ const NAV: NavItem[] = [
   { to: '/admin/topups', label: 'Top-ups', icon: Wallet, end: false, mobileHidden: true },
   { to: '/admin/items', label: 'Items', icon: CupSoda, end: false },
   { to: '/admin/users', label: 'Users', icon: Users, end: false },
+  { to: '/notifications', label: 'Alerts', icon: Bell, end: false, showsUnread: true },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
 
 export default function AdminLayout() {
+  const { unread } = useNotifications()
+
   return (
     <div className="min-h-dvh md:flex bg-surface">
       <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-line bg-surface-raised p-4 gap-1">
@@ -38,13 +46,14 @@ export default function AdminLayout() {
             key={n.to}
             to={n.to}
             end={n.end}
+            aria-label={n.showsUnread ? unreadLabel(n.label, unread) : undefined}
             className={({ isActive }) =>
               `rounded-md px-3 py-2.5 text-sm font-medium transition flex items-center gap-2 ${
                 isActive ? 'bg-ink-900 text-white' : 'text-ink-500 hover:bg-ink-900/5'
               }`
             }
           >
-            <n.icon className="size-6" strokeWidth={2.5} aria-hidden="true" />
+            <NavItemIcon icon={n.icon} badge={n.showsUnread ? unread : 0} />
             {n.label}
           </NavLink>
         ))}
@@ -75,13 +84,14 @@ export default function AdminLayout() {
             key={n.to}
             to={n.to}
             end={n.end}
+            aria-label={n.showsUnread ? unreadLabel(n.label, unread) : undefined}
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 text-[10px] px-2 py-1 rounded-md min-w-11 ${
                 isActive ? 'text-brand-700 font-bold' : 'text-ink-500'
               }`
             }
           >
-            <n.icon className="size-6" strokeWidth={2.5} aria-hidden="true" />
+            <NavItemIcon icon={n.icon} badge={n.showsUnread ? unread : 0} />
             {n.label}
           </NavLink>
         ))}

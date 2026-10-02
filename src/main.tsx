@@ -5,15 +5,21 @@ import './index.css'
 import App from './App'
 import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
+import { NotificationsProvider } from './context/NotificationsContext'
+import { registerServiceWorker } from './lib/push'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <CartProvider>
-          <App />
-        </CartProvider>
+        <NotificationsProvider>
+          <CartProvider>
+            <App />
+          </CartProvider>
+        </NotificationsProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 )
+
+registerServiceWorker()

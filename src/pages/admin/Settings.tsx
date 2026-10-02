@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { AppSettings } from '../../types'
+import PushToggle from '../../components/PushToggle'
 import PaymentMethods from './Payments'
 
 const MODELS: { value: AppSettings['payment_ai_model']; label: string; hint: string }[] = [
@@ -76,7 +77,7 @@ export default function Settings() {
                 aria-checked={settings.payment_ai_enabled}
                 aria-label="Verify payments with AI"
                 onClick={() => setSettings({ ...settings, payment_ai_enabled: !settings.payment_ai_enabled })}
-                className={`shrink-0 w-12 h-7 rounded-full transition relative ${settings.payment_ai_enabled ? 'bg-brand-600' : 'bg-ink-900/15'}`}
+                className={`shrink-0 w-12 h-7 rounded-full transition relative ${settings.payment_ai_enabled ? 'bg-brand-600' : 'bg-ink-500'}`}
               >
                 <span
                   className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition ${settings.payment_ai_enabled ? 'left-[calc(100%-1.625rem)]' : 'left-0.5'}`}
@@ -119,6 +120,10 @@ export default function Settings() {
             </div>
           </>
         )}
+      </section>
+
+      <section className="rounded-2xl bg-surface-raised shadow-sm p-4 md:p-5">
+        <PushToggle />
       </section>
 
       <section className="rounded-2xl bg-surface-raised shadow-sm p-4 md:p-5">

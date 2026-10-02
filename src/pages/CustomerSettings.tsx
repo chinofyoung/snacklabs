@@ -1,8 +1,22 @@
+import { useState } from 'react'
 import { CircleUser } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import PushToggle from '../components/PushToggle'
 
 export default function CustomerSettings() {
   const { profile, signOut } = useAuth()
+  // Signing out can wait on the push teardown (bounded at a few seconds), so the
+  // button has to show it is working or it reads as broken and gets tapped again.
+  const [signingOut, setSigningOut] = useState(false)
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    try {
+      await signOut()
+    } finally {
+      setSigningOut(false)
+    }
+  }
 
   return (
     <div className="max-w-md mx-auto px-4 py-4 space-y-5 pb-28 app-frame">
@@ -27,12 +41,17 @@ export default function CustomerSettings() {
         </div>
       </div>
 
+      <section className="rounded-lg bg-surface-raised p-4 shadow-card">
+        <PushToggle />
+      </section>
+
       <button
         type="button"
-        onClick={() => { void signOut() }}
-        className="w-full rounded-lg bg-ink-900 text-white py-4 font-bold active:scale-[0.98] transition"
+        onClick={() => void handleSignOut()}
+        disabled={signingOut}
+        className="w-full rounded-lg bg-ink-900 text-white py-4 font-bold active:scale-[0.98] transition disabled:opacity-50"
       >
-        Sign out
+        {signingOut ? 'Signing out…' : 'Sign out'}
       </button>
     </div>
   )
