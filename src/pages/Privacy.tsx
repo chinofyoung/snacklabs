@@ -4,7 +4,7 @@ export default function Privacy() {
   return (
     <LegalLayout
       title="Privacy Policy"
-      lastUpdated="8 September 2026"
+      lastUpdated="2 October 2026"
       otherDocHref="/terms"
       otherDocLabel="Terms of Service"
     >
@@ -15,20 +15,23 @@ export default function Privacy() {
         </p>
 
         <section className="space-y-2">
-          <h2 className="font-display text-lg font-bold text-ink-900">Signing in with Google</h2>
+          <h2 className="font-display text-lg font-bold text-ink-900">Signing in</h2>
           <p>
-            SnackLabs is a tool for ordering snacks from the office pantry. You sign in with your Google account, and
-            we store the account&apos;s email address, full name and avatar (profile photo) URL in a profile record
-            tied to your account. We do not receive or store your Google password.
+            SnackLabs is a tool for ordering snacks from the office pantry. You can sign in with your Google account,
+            or register with your name, email address and a password. We store your email address and name, plus your
+            avatar (profile photo) URL if you use Google, in a profile record tied to your account. We do not receive
+            or store your Google password. A password you choose for SnackLabs is stored only in hashed form by
+            Supabase, our authentication provider.
           </p>
         </section>
 
         <section className="space-y-2">
           <h2 className="font-display text-lg font-bold text-ink-900">Who can use SnackLabs</h2>
           <p>
-            Access is limited to @goabroad.com Google accounts and to specific email addresses an administrator has
-            added to an allow list. An administrator can also revoke a person&apos;s access at any time, which blocks
-            further sign-ins without deleting that person&apos;s existing order history.
+            You can sign in with Google or with an email address and password, but only people whose email address is
+            at a domain an administrator has approved can register. A new account cannot be used until an
+            administrator confirms it. An administrator can also revoke a person&apos;s access at any time, which
+            blocks further sign-ins without deleting that person&apos;s existing order history.
           </p>
         </section>
 
@@ -78,11 +81,10 @@ export default function Privacy() {
         <section className="space-y-2">
           <h2 className="font-display text-lg font-bold text-ink-900">Who can see your data</h2>
           <p>
-            Any signed-in colleague can see basic profile information (name, email, avatar) for other signed-in
-            users, the same way you&apos;d recognize a coworker in the same office tool. Your specific orders, order
-            contents and payment receipts, however, are visible only to you and to administrators. Administrators can
-            see every order, every uploaded receipt, and every user account in order to run the pantry and resolve
-            payment issues.
+            Your profile information (name, email, avatar) is visible only to you and to administrators; other users
+            cannot see it. Your orders, order contents and payment receipts are likewise visible only to you and to
+            administrators. Administrators can see every order, every uploaded receipt, and every user account in
+            order to run the pantry and resolve payment issues.
           </p>
         </section>
 

@@ -52,6 +52,20 @@ Deno.serve(async (req) => {
   const { data: order, error: orderErr } = await userClient
     .from('orders').select('*').eq('id', order_id).single()
   if (orderErr || !order) return json({ error: 'order not found' }, 404)
+
+  // Account gate. The orders SELECT policy is deliberately ungated (a user's own
+  // order history stays readable after they are blocked or rejected), so reaching
+  // this line proves only that the caller owns the order, not that they may still
+  // pay for it. Without this check a blocked or rejected user holding an
+  // awaiting_payment order could POST the path of a receipt uploaded BEFORE the
+  // block and have the service-role client below drive the order to 'paid'. The
+  // storage policies stop a fresh upload, not the reuse of an existing object.
+  // Asked through userClient on purpose: the service client would answer for the
+  // service role, not for the caller. Fails closed on an RPC error.
+  const { data: isActive, error: activeErr } = await userClient.rpc('is_active_user')
+  if (activeErr) return json({ error: 'could not verify account status' }, 500)
+  if (!isActive) return json({ error: 'account not active' }, 403)
+
   if (!['awaiting_payment', 'needs_review'].includes(order.status)) {
     return json({ error: `order is ${order.status}` }, 409)
   }

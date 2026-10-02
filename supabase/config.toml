@@ -385,6 +385,15 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Edge Functions verify the caller's JWT by default. `register` is the one function
+# that must not: its caller is by definition someone who has no account yet, so there
+# is no session and no JWT to present. The function does its own input validation and
+# runs the allowed-domain check under the service role. Leave every other function on
+# the default: verify-payment in particular relies on a real, verified caller identity
+# (it asks is_active_user() on the caller's behalf), and analyze-shelf checks is_admin().
+[functions.register]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

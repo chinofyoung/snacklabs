@@ -16,6 +16,12 @@ values ('11111111-1111-1111-1111-111111111111',
         'bob@goabroad.com', '{"full_name":"Bob"}'::jsonb, now(), now());
 update public.profiles set is_admin = true
 where id = '22222222-2222-2222-2222-222222222222';
+-- A new profile starts pending. Alice and Bob stand in for ordinary approved
+-- customers, so the refusals below are the admin check refusing a shopper, not
+-- a pending account being turned away.
+update public.profiles set approval_status = 'approved'
+where id in ('11111111-1111-1111-1111-111111111111',
+             '33333333-3333-3333-3333-333333333333');
 
 -- A local database can hold wallets from earlier manual use. Everything here is
 -- rolled back, so clear them: the literal totals below must be the sum of

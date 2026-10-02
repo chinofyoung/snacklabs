@@ -21,6 +21,15 @@ values ('11111111-1111-1111-1111-111111111111',
 update public.profiles set is_admin = true
 where id in ('22222222-2222-2222-2222-222222222222',
              '44444444-4444-4444-4444-444444444444');
+-- A new profile starts pending, and request_topup, the topup_requests read
+-- policy and the topup-proofs upload policy all require an approved account.
+-- Alice and Bob are shoppers. Admin also files top-ups of their own (as a
+-- shopper, not as a reviewer), so is approved too. Second Admin only reviews,
+-- and the review RPCs check is_admin() alone, so needs no approval.
+update public.profiles set approval_status = 'approved'
+where id in ('11111111-1111-1111-1111-111111111111',
+             '22222222-2222-2222-2222-222222222222',
+             '33333333-3333-3333-3333-333333333333');
 
 -- One payment method a customer may pay by, and one that has been switched off.
 insert into public.payment_methods (id, label, type, account_name, is_active)

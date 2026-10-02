@@ -17,6 +17,12 @@ values ('11111111-1111-1111-1111-111111111111',
         'bob@goabroad.com', '{"full_name":"Bob"}'::jsonb, now(), now());
 update public.profiles set is_admin = true
 where id = '22222222-2222-2222-2222-222222222222';
+-- A new profile starts pending, and create_order refuses a pending account
+-- (and the read policies on wallets, wallet_entries and items hide their rows
+-- from it). Alice and Bob are the shoppers, so approve them.
+update public.profiles set approval_status = 'approved'
+where id in ('11111111-1111-1111-1111-111111111111',
+             '33333333-3333-3333-3333-333333333333');
 
 insert into public.items (id, name, price, stock, category)
 values ('aaaaaaaa-0000-0000-0000-000000000001', 'Piattos', 30, 100, 'snacks');
@@ -753,10 +759,17 @@ select is(
   'awaiting_payment',
   'the blocked customer''s order is left unpaid');
 
+-- Read as the table owner, not as Bob: the wallets read policy now requires an
+-- active account, so a blocked Bob gets no row back and the assertion would
+-- compare null with 30 instead of showing whether the balance moved.
+reset role;
 select is(
   (select balance from public.wallets where user_id = '33333333-3333-3333-3333-333333333333'),
   30::numeric(10,2),
   'and their balance is untouched');
+
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333"}';
 
 select throws_ok(
   $$select public.request_topup(10, null, '33333333-3333-3333-3333-333333333333/p.jpg')$$,

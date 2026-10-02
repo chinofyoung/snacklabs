@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 import Store from './pages/Store'
@@ -25,6 +26,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/" element={<HomeRedirect />} />

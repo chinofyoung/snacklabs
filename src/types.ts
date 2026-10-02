@@ -73,10 +73,21 @@ export interface RestockSession {
   created_at: string
 }
 
-export interface EmailAllowlistEntry {
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+
+export interface AllowedDomain {
+  id: string
+  domain: string
+  note: string
+  created_at: string
+}
+
+export interface PendingRegistration {
   id: string
   email: string
-  note: string
+  full_name: string
+  first_name: string
+  last_name: string
   created_at: string
 }
 

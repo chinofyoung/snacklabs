@@ -93,9 +93,9 @@ select throws_ok(
             '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
             'eve@example.com', '{}'::jsonb, now(), now())$$,
   'P0001',
-  'Only goabroad.com accounts or invited addresses may sign in',
-  'a non-goabroad, non-allowlisted email is still rejected');
-insert into public.email_allowlist (email) values ('guest@example.org');
+  'This email address is not eligible to register',
+  'an email on an unlisted domain is still rejected');
+insert into public.allowed_email_domains (domain) values ('example.org');
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values ('55555555-5555-5555-5555-555555555555',
         '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
@@ -103,7 +103,7 @@ values ('55555555-5555-5555-5555-555555555555',
 select is(
   (select count(*)::int from public.wallets where user_id = '55555555-5555-5555-5555-555555555555'),
   1,
-  'an allowlisted address is accepted and gets a wallet');
+  'an address on an allowed domain is accepted and gets a wallet');
 
 -- RLS: one customer cannot read another's wallet. Bob is a second real user
 -- rather than a bare uuid because the select policy compares against
@@ -112,7 +112,10 @@ insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, c
 values ('33333333-3333-3333-3333-333333333333',
         '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
         'bob@goabroad.com', '{"full_name":"Bob"}'::jsonb, now(), now());
-
+-- A new profile starts pending, and the wallet read policies only show an
+-- account its own rows once it is approved. Bob is a shopper, so approve him.
+update public.profiles set approval_status = 'approved'
+where id = '33333333-3333-3333-3333-333333333333';
 
 -- Admin fixture: created via handle_new_user like everyone else, then promoted.
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, created_at, updated_at)
