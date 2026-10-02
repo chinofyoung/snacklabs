@@ -35,7 +35,7 @@ export default function App() {
         <Route path="/store" element={<Store />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/wallet" element={<Wallet />} />
-        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/notifications" element={<Notifications audience="customer" />} />
         <Route path="/settings" element={<CustomerSettings />} />
       </Route>
       <Route path="/cart" element={<RequireAuth><Cart /></RequireAuth>} />
@@ -51,6 +51,7 @@ export default function App() {
         <Route path="orders" element={<AdminOrders />} />
         <Route path="topups" element={<Topups />} />
         <Route path="restock" element={<Restock />} />
+        <Route path="notifications" element={<Notifications audience="admin" />} />
       </Route>
     </Routes>
   )

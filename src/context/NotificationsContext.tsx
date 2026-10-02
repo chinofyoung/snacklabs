@@ -1,20 +1,29 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
-import { PAGE, addNotification, countUnread, markRead, mergeFetched, unmarkRead } from '../lib/notifications'
+import {
+  PAGE, addNotification, countUnreadByAudience, inAudience, markRead, mergeFetched, unmarkRead,
+  type NotificationAudience,
+} from '../lib/notifications'
 import type { AppNotification } from '../types'
 
 interface NotificationsState {
   items: AppNotification[]
-  unread: number
-  markAllRead: () => Promise<void>
+  // One count per audience and no total: each nav's badge must equal the number
+  // of unread rows on the Alerts page it links to, and a total matches neither.
+  unreadByAudience: Record<NotificationAudience, number>
+  // Marks one audience's unread rows read and leaves the other's alone. There is
+  // deliberately no "mark everything" form: visiting admin Alerts must not
+  // quietly clear a person's own top-up alerts.
+  markAudienceRead: (audience: NotificationAudience) => Promise<void>
   reload: () => Promise<void>
 }
 
 const NONE: AppNotification[] = []
+const NO_UNREAD: Record<NotificationAudience, number> = { admin: 0, customer: 0 }
 
 const NotificationsContext = createContext<NotificationsState>({
-  items: NONE, unread: 0, markAllRead: async () => {}, reload: async () => {},
+  items: NONE, unreadByAudience: NO_UNREAD, markAudienceRead: async () => {}, reload: async () => {},
 })
 
 // The list is stored with the person it belongs to. On a shared device the next
@@ -85,9 +94,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return () => { void supabase.removeChannel(channel) }
   }, [userId, reload, apply])
 
-  const markAllRead = useCallback(async () => {
+  const markAudienceRead = useCallback(async (audience: NotificationAudience) => {
     if (!userId) return
-    const unreadIds = ownItems(store, userId).filter((n) => !n.read_at).map((n) => n.id)
+    const unreadIds = inAudience(ownItems(store, userId), audience).filter((n) => !n.read_at).map((n) => n.id)
     if (!unreadIds.length) return
     const ids = new Set(unreadIds)
     const now = new Date().toISOString()
@@ -119,8 +128,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<NotificationsState>(() => {
     const mine = ownItems(store, userId)
-    return { items: mine, unread: countUnread(mine), markAllRead, reload }
-  }, [store, userId, markAllRead, reload])
+    return { items: mine, unreadByAudience: countUnreadByAudience(mine), markAudienceRead, reload }
+  }, [store, userId, markAudienceRead, reload])
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>
 }

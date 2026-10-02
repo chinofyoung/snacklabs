@@ -1,11 +1,38 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Bell } from 'lucide-react'
 import { useNotifications } from '../context/NotificationsContext'
+import { inAudience } from '../lib/notifications'
+import type { NotificationAudience } from '../lib/notifications'
 import type { AppNotification } from '../types'
 
-export default function Notifications() {
-  const { items, markAllRead, reload } = useNotifications()
+// One page, mounted at /notifications (inside the customer shell) and at
+// /admin/notifications (inside the admin shell). What differs is the framing the
+// shell expects and what an empty list should say. Typed as a Record so a third
+// audience cannot be added without deciding both.
+const VIEW: Record<NotificationAudience, { page: string; heading: string; empty: string }> = {
+  // The customer shell stretches its page to a framed, centred phone-width column.
+  customer: {
+    page: 'max-w-md mx-auto px-4 py-4 space-y-4 pb-28 app-frame',
+    heading: 'text-xl',
+    empty: "You'll hear from us here when one of your top-ups is reviewed.",
+  },
+  // The admin shell supplies its own surface and bottom padding, and its pages
+  // are left-aligned blocks of the same width and heading size as Top-ups.
+  admin: {
+    page: 'p-4 md:p-8 space-y-4 max-w-3xl',
+    heading: 'text-2xl',
+    empty: 'New registrations, top-ups and orders waiting for your review will show up here.',
+  },
+}
+
+export default function Notifications({ audience }: { audience: NotificationAudience }) {
+  const { items: all, markAudienceRead, reload } = useNotifications()
+  const view = VIEW[audience]
+  // Everything below (what is listed, what counts as unseen, what gets marked
+  // read) works from this one filtered list, so the page never marks or shows a
+  // row from the other audience.
+  const items = useMemo(() => inAudience(all, audience), [all, audience])
 
   // Rows are marked read the moment they are on screen, so `read_at` alone could
   // never tell the person what is new. This holds the ids that were unread when
@@ -26,8 +53,8 @@ export default function Notifications() {
     if (unseen.length === 0) return
     unseen.forEach((n) => attempted.current.add(n.id))
     setFresh((held) => new Set([...held, ...unseen.map((n) => n.id)]))
-    void markAllRead()
-  }, [items, markAllRead])
+    void markAudienceRead(audience)
+  }, [items, audience, markAudienceRead])
 
   // The context already refetches when the realtime channel (re)subscribes, but a
   // half-dead socket can sit unnoticed for a while. Opening this page is the one
@@ -40,8 +67,8 @@ export default function Notifications() {
   }, [reload])
 
   return (
-    <div className="max-w-md mx-auto px-4 py-4 space-y-4 pb-28 app-frame">
-      <h1 className="font-display text-xl font-bold">Alerts</h1>
+    <div className={view.page}>
+      <h1 className={`font-display font-bold ${view.heading}`}>Alerts</h1>
 
       {items.length > 0 ? (
         <ul className="space-y-2">
@@ -55,9 +82,7 @@ export default function Notifications() {
         <div className="text-center py-12 space-y-2">
           <Bell className="size-12 mx-auto text-ink-500" strokeWidth={2.5} aria-hidden="true" />
           <p className="text-ink-700 font-medium">Nothing yet</p>
-          <p className="text-ink-700 text-sm">
-            Top-up updates and anything that needs your attention will show up here.
-          </p>
+          <p className="text-ink-700 text-sm">{view.empty}</p>
         </div>
       ) : (
         <p className="text-center text-ink-700 py-8">Loading…</p>

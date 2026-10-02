@@ -25,7 +25,7 @@ const NAV: NavItem[] = [
 
 export default function CustomerLayout() {
   const { profile } = useAuth()
-  const { unread } = useNotifications()
+  const unread = useNotifications().unreadByAudience.customer
 
   return (
     <div className="min-h-dvh flex flex-col bg-surface">

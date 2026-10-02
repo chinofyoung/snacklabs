@@ -27,12 +27,14 @@ const NAV: NavItem[] = [
   { to: '/admin/topups', label: 'Top-ups', icon: Wallet, end: false, mobileHidden: true },
   { to: '/admin/items', label: 'Items', icon: CupSoda, end: false },
   { to: '/admin/users', label: 'Users', icon: Users, end: false },
-  { to: '/notifications', label: 'Alerts', icon: Bell, end: false, showsUnread: true },
+  { to: '/admin/notifications', label: 'Alerts', icon: Bell, end: false, showsUnread: true },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
 
 export default function AdminLayout() {
-  const { unread } = useNotifications()
+  // Admin work only. The person's own top-up alerts are on the store's Alerts,
+  // so this count has to leave them out to match the page it opens.
+  const unread = useNotifications().unreadByAudience.admin
 
   return (
     <div className="min-h-dvh md:flex bg-surface">

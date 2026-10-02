@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { PAGE, addNotification, countUnread, markRead, mergeFetched, unmarkRead, unreadLabel } from './notifications'
-import type { AppNotification } from '../types'
+import {
+  AUDIENCE_OF_KIND, PAGE, addNotification, audienceOf, countUnread, countUnreadByAudience, inAudience,
+  markRead, mergeFetched, unmarkRead, unreadLabel,
+} from './notifications'
+import type { NotificationAudience } from './notifications'
+import type { AppNotification, NotificationKind } from '../types'
 
 // Minutes after a fixed origin, so a larger `n` is a newer row.
-function row(n: number, read_at: string | null = null): AppNotification {
+function row(n: number, read_at: string | null = null, kind: NotificationKind = 'topup_approved'): AppNotification {
   return {
-    id: `n${n}`, user_id: 'u1', kind: 'topup_approved', title: `t${n}`, body: '', link: '',
+    id: `n${n}`, user_id: 'u1', kind, title: `t${n}`, body: '', link: '',
     read_at, created_at: new Date(Date.UTC(2026, 9, 2, 0, n)).toISOString(),
   }
 }
@@ -107,5 +111,89 @@ describe('unreadLabel', () => {
 
   it('leaves the link on its own text when nothing is unread', () => {
     expect(unreadLabel('Alerts', 0)).toBeUndefined()
+  })
+})
+
+// Spelled out for every kind, and typed as a Record so tsc rejects a table that
+// is missing one. A kind added to NotificationKind without being classified in
+// notifications.ts fails the build; one added there without being listed here
+// fails the key-set test below.
+const EXPECTED_AUDIENCE: Record<NotificationKind, NotificationAudience> = {
+  topup_requested: 'admin',
+  registration_pending: 'admin',
+  order_needs_review: 'admin',
+  topup_approved: 'customer',
+  topup_rejected: 'customer',
+}
+
+describe('audienceOf', () => {
+  it.each(Object.entries(EXPECTED_AUDIENCE) as [NotificationKind, NotificationAudience][])(
+    'files %s under %s',
+    (kind, audience) => {
+      expect(audienceOf(kind)).toBe(audience)
+    },
+  )
+
+  it('classifies exactly the kinds this suite lists, so a new kind cannot go unclassified', () => {
+    expect(Object.keys(AUDIENCE_OF_KIND).sort()).toEqual(Object.keys(EXPECTED_AUDIENCE).sort())
+  })
+
+  it('gives every kind one of the two audiences', () => {
+    for (const kind of Object.keys(AUDIENCE_OF_KIND) as NotificationKind[]) {
+      expect(['admin', 'customer']).toContain(audienceOf(kind))
+    }
+  })
+})
+
+describe('inAudience', () => {
+  const mixed = [
+    row(5, null, 'topup_approved'),
+    row(4, null, 'order_needs_review'),
+    row(3, null, 'registration_pending'),
+    row(2, null, 'topup_rejected'),
+    row(1, null, 'topup_requested'),
+  ]
+
+  it('keeps only the admin kinds, in order', () => {
+    expect(ids(inAudience(mixed, 'admin'))).toEqual(['n4', 'n3', 'n1'])
+  })
+
+  it('keeps only the customer kinds, in order', () => {
+    expect(ids(inAudience(mixed, 'customer'))).toEqual(['n5', 'n2'])
+  })
+
+  it('splits a list with nothing left over or counted twice', () => {
+    expect(inAudience(mixed, 'admin').length + inAudience(mixed, 'customer').length).toBe(mixed.length)
+  })
+
+  it('leaves a kind this bundle does not know out of both audiences', () => {
+    const future = [{ ...row(1), kind: 'something_new' as unknown as NotificationKind }]
+    expect(inAudience(future, 'admin')).toEqual([])
+    expect(inAudience(future, 'customer')).toEqual([])
+  })
+})
+
+describe('countUnreadByAudience', () => {
+  it('counts each audience on its own, ignoring the other side and read rows', () => {
+    const list = [
+      row(5, null, 'topup_approved'),
+      row(4, null, 'order_needs_review'),
+      row(3, 'read', 'registration_pending'),
+      row(2, null, 'topup_requested'),
+      row(1, 'read', 'topup_rejected'),
+    ]
+    expect(countUnreadByAudience(list)).toEqual({ admin: 2, customer: 1 })
+  })
+
+  it('is zero on both sides for an empty list', () => {
+    expect(countUnreadByAudience([])).toEqual({ admin: 0, customer: 0 })
+  })
+
+  it('does not let reading one audience clear the other', () => {
+    const list = [row(2, null, 'topup_approved'), row(1, null, 'order_needs_review')]
+    const adminIds = new Set(inAudience(list, 'admin').map((n) => n.id))
+    expect(countUnreadByAudience(markRead(list, adminIds, '2026-10-02T01:00:00.000Z'))).toEqual({
+      admin: 0, customer: 1,
+    })
   })
 })

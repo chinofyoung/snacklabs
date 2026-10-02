@@ -1,4 +1,4 @@
-import type { AppNotification } from '../types'
+import type { AppNotification, NotificationKind } from '../types'
 
 // How many of a person's newest notifications the app holds. The unread badge
 // counts within this window, so it tops out here.
@@ -50,6 +50,43 @@ export function unmarkRead(list: AppNotification[], ids: ReadonlySet<string>, at
 
 export function countUnread(list: AppNotification[]): number {
   return list.filter((n) => !n.read_at).length
+}
+
+// Which half of the app a notification belongs to. An admin is two people in one
+// account: the person running the pantry and a customer with a wallet. Both get
+// notifications, and each side's Alerts must show only its own.
+export type NotificationAudience = 'admin' | 'customer'
+
+// Written out kind by kind, and typed as a Record so it must stay that way: a
+// new NotificationKind is a compile error here until someone decides who it is
+// for. A default (say, "anything else is a customer's") would instead file the
+// new kind in the wrong inbox without a sound. Exported so the test can pin the
+// set of classified kinds, not just the ones it happens to list.
+export const AUDIENCE_OF_KIND: Record<NotificationKind, NotificationAudience> = {
+  topup_requested: 'admin',
+  registration_pending: 'admin',
+  order_needs_review: 'admin',
+  topup_approved: 'customer',
+  topup_rejected: 'customer',
+}
+
+export function audienceOf(kind: NotificationKind): NotificationAudience {
+  return AUDIENCE_OF_KIND[kind]
+}
+
+// The rows a given Alerts page shows, a badge counts and a mark-as-read touches.
+// All three go through here so they cannot disagree. A kind this bundle does not
+// know (a stale tab, after a newer migration added one) matches neither audience
+// and is left out of both, rather than filed on the wrong side.
+export function inAudience(list: AppNotification[], audience: NotificationAudience): AppNotification[] {
+  return list.filter((n) => audienceOf(n.kind) === audience)
+}
+
+export function countUnreadByAudience(list: AppNotification[]): Record<NotificationAudience, number> {
+  return {
+    admin: countUnread(inAudience(list, 'admin')),
+    customer: countUnread(inAudience(list, 'customer')),
+  }
 }
 
 // The accessible name of a nav link that shows an unread count, so the badge is
